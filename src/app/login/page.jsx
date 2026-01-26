@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from '@/app/Config/firebaseConfig'; 
+import { auth } from '../Config/firebaseConfig'; 
 
 import { FaShieldAlt, FaLock, FaUserShield, FaChevronRight, FaUserTie, FaCode } from "react-icons/fa";
 import { BiPulse } from "react-icons/bi";
