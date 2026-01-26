@@ -1,23 +1,27 @@
 "use client";
-import { useState } from 'react';
-import Sidebar from '@/app/components/Sidebar';
-import { 
-  FaClipboardList, FaTools, FaCheckCircle, 
-  FaExclamationTriangle, FaClock, FaTrash, FaFilter, FaCheckDouble, FaCalendarCheck
-} from "react-icons/fa";
-import { BiBell, BiGhost } from "react-icons/bi";
+import { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar'; 
+import { FaCheckDouble } from "react-icons/fa";
+import { BiGhost } from "react-icons/bi";
+
+// IMPORT YOUR NEW CLEAN COMPONENTS
+import PulseLoader from '../components/PulseLoader';
+import NotificationCard from '../components/NotificationCard';
+import NotificationModal from '../components/NotificationModal';
 
 const NotificationsPage = () => {
   const [isOpen, setIsOpen] = useState(true);
-  const [filter, setFilter] = useState('all'); // 'all', 'unread', 'urgent', 'system'
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all'); 
+  const [selectedNotif, setSelectedNotif] = useState(null);
 
-  // MOCK DATA - PROFESSIONAL TONE
+  // MOCK DATA (You will replace this with Supabase Fetch later)
   const [notifications, setNotifications] = useState([
     {
       id: 1,
       type: "SCHEDULE_OVERRIDE",
       title: "Viewing Schedule Update",
-      message: "Viewing for Unit A402 confirmed at 14:00. Note: Falls within standard travel buffer.",
+      message: "Viewing for Unit A402 confirmed at 14:00. Note: Falls within standard travel buffer for the maintenance team. Tenant has been notified via SMS.",
       time: "10 mins ago",
       priority: "Normal",
       read: false
@@ -26,7 +30,7 @@ const NotificationsPage = () => {
       id: 2,
       type: "JOB_DONE",
       title: "Maintenance Completed",
-      message: "Unit B12: Kitchen Sink repair marked as complete by Lindiwe. Verification pending.",
+      message: "Unit B12: Kitchen Sink repair marked as complete by Lindiwe. Verification pending. Please review the attached photos in the unit log to authorize vendor payment.",
       time: "45 mins ago",
       priority: "Normal",
       read: true
@@ -35,7 +39,7 @@ const NotificationsPage = () => {
       id: 3,
       type: "URGENT_MAINTENANCE",
       title: "Urgent: Water Leak Reported",
-      message: "Unit C09: Tenant reported burst pipe. Automatic alert sent to plumbing vendor.",
+      message: "Unit C09: Tenant reported burst pipe. Automatic alert sent to plumbing vendor (Rasta). Water main shutoff instructed via Pulse Chatbot. Immediate site visit required to assess floor damage.",
       time: "2 hours ago",
       priority: "Critical",
       read: false
@@ -44,19 +48,32 @@ const NotificationsPage = () => {
       id: 4,
       type: "SYSTEM",
       title: "Lease Renewal Reminder",
-      message: "Unit 404 lease expiring in 60 days. Renewal notice queued for dispatch.",
+      message: "Unit 404 lease expiring in 60 days. Renewal notice queued for dispatch. System recommendation: Review current market rates for Pretoria Hatfield area before confirming R7k rental price.",
       time: "5 hours ago",
       priority: "Normal",
       read: true
     }
   ]);
 
-  // ACTIONS
+  // Simulate "Cooking" Effect
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 1500); 
+    return () => clearTimeout(timer);
+  }, []);
+
   const markAllRead = () => setNotifications(notifications.map(n => ({ ...n, read: true })));
   const markAsRead = (id) => setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
-  const deleteNotif = (id) => setNotifications(notifications.filter(n => n.id !== id));
+  
+  const deleteNotif = (id) => {
+    setNotifications(notifications.filter(n => n.id !== id));
+    if (selectedNotif?.id === id) setSelectedNotif(null);
+  };
 
-  // FILTER LOGIC
+  const handleOpenSession = (notif) => {
+    setSelectedNotif(notif);
+    markAsRead(notif.id); 
+  };
+
   const filteredNotifications = notifications.filter(n => {
     if (filter === 'unread') return !n.read;
     if (filter === 'urgent') return n.priority === 'High' || n.priority === 'Critical';
@@ -65,6 +82,9 @@ const NotificationsPage = () => {
   });
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  // The Loader
+  if (loading) return <PulseLoader />;
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] font-sans">
@@ -75,7 +95,7 @@ const NotificationsPage = () => {
         {/* HEADER */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end mb-10 gap-4 max-w-4xl mx-auto">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Pulse Feed</h1>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic leading-none mb-2">Pulse Feed</h1>
             <p className="text-[10px] text-blue-600 font-black tracking-[0.3em] uppercase">System Activity Log</p>
           </div>
           
@@ -89,7 +109,7 @@ const NotificationsPage = () => {
         </header>
 
         {/* FILTERS */}
-        <div className="max-w-4xl mx-auto mb-8 flex overflow-x-auto gap-2 no-scrollbar pb-2">
+        <div className="max-w-4xl mx-auto mb-8 flex overflow-x-auto gap-3 no-scrollbar pb-2">
             {[
                 { key: 'all', label: 'All Activity' },
                 { key: 'unread', label: `Unread (${unreadCount})` },
@@ -99,10 +119,10 @@ const NotificationsPage = () => {
                 <button 
                     key={f.key} 
                     onClick={() => setFilter(f.key)}
-                    className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase whitespace-nowrap transition-all border ${
+                    className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase whitespace-nowrap transition-all border ${
                         filter === f.key 
-                        ? 'bg-slate-900 text-white border-slate-900 shadow-lg' 
-                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-xl scale-105' 
+                        : 'bg-white text-slate-500 border-slate-200 hover:border-blue-300'
                     }`}
                 >
                     {f.label}
@@ -113,8 +133,8 @@ const NotificationsPage = () => {
         {/* FEED LIST */}
         <div className="max-w-4xl mx-auto space-y-4">
           {filteredNotifications.length === 0 ? (
-            <div className="text-center py-20 flex flex-col items-center opacity-50">
-               <BiGhost size={48} className="mb-4 text-slate-300" />
+            <div className="text-center py-20 flex flex-col items-center opacity-40">
+               <BiGhost size={56} className="mb-4 text-slate-400" />
                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">No updates found</p>
             </div>
           ) : (
@@ -122,94 +142,19 @@ const NotificationsPage = () => {
               <NotificationCard 
                 key={n.id} 
                 data={n} 
-                onRead={() => markAsRead(n.id)} 
-                onDelete={() => deleteNotif(n.id)} 
+                onClick={() => handleOpenSession(n)} 
               />
             ))
           )}
         </div>
       </main>
-    </div>
-  );
-};
 
-/* --- CARD COMPONENT --- */
-const NotificationCard = ({ data, onRead, onDelete }) => {
-  const { type, title, message, time, priority, read } = data;
-
-  // ICON & COLOR LOGIC
-  let icon = <BiBell />;
-  let colorClass = "bg-blue-100 text-blue-600";
-  let borderClass = "border-l-4 border-l-blue-500"; 
-
-  if (type === 'SCHEDULE_OVERRIDE') {
-      icon = <FaCalendarCheck />;
-      colorClass = "bg-orange-100 text-orange-600";
-      borderClass = "border-l-4 border-l-orange-500";
-  } else if (type === 'URGENT_MAINTENANCE' || priority === 'Critical') {
-      icon = <FaExclamationTriangle />;
-      colorClass = "bg-red-100 text-red-600";
-      borderClass = "border-l-4 border-l-red-500";
-  } else if (type === 'JOB_DONE') {
-      icon = <FaCheckCircle />;
-      colorClass = "bg-green-100 text-green-600";
-      borderClass = "border-l-4 border-l-green-500";
-  } else if (type === 'SYSTEM') {
-      icon = <FaClipboardList />;
-      colorClass = "bg-slate-100 text-slate-600";
-      borderClass = "border-l-4 border-l-slate-500";
-  }
-
-  return (
-    <div className={`relative group p-6 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition-all animate-in fade-in slide-in-from-bottom-2 ${read ? 'opacity-70 bg-slate-50' : 'opacity-100'}`}>
-      
-      {/* LEFT BORDER ACCENT */}
-      <div className={`absolute left-0 top-4 bottom-4 w-1 rounded-r-full ${borderClass.split(' ')[1]}`}></div>
-
-      <div className="flex items-start gap-5 ml-2">
-        {/* ICON */}
-        <div className={`p-3 rounded-xl shrink-0 ${colorClass}`}>
-           {icon}
-        </div>
-
-        {/* CONTENT */}
-        <div className="flex-1">
-           <div className="flex justify-between items-start">
-              <h3 className={`text-xs font-black uppercase tracking-tight mb-1 ${read ? 'text-slate-500' : 'text-slate-900'}`}>
-                  {title}
-              </h3>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                  <FaClock size={8} /> {time}
-              </span>
-           </div>
-           
-           <p className="text-[11px] font-medium text-slate-600 leading-relaxed max-w-xl">
-              {message}
-           </p>
-
-           {/* BADGES */}
-           <div className="flex gap-2 mt-3">
-               {(priority === 'High' || priority === 'Critical') && (
-                   <span className="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">High Priority</span>
-               )}
-               {!read && (
-                   <span className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider">New</span>
-               )}
-           </div>
-        </div>
-
-        {/* HOVER ACTIONS */}
-        <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            {!read && (
-                <button onClick={onRead} className="p-2 bg-slate-100 hover:bg-blue-100 text-slate-400 hover:text-blue-600 rounded-lg transition-colors" title="Mark Read">
-                    <FaCheckDouble size={12} />
-                </button>
-            )}
-            <button onClick={onDelete} className="p-2 bg-slate-100 hover:bg-red-100 text-slate-400 hover:text-red-600 rounded-lg transition-colors" title="Delete">
-                <FaTrash size={12} />
-            </button>
-        </div>
-      </div>
+      {/* THE SESSION WINDOW (MODAL) */}
+      <NotificationModal 
+          data={selectedNotif} 
+          onClose={() => setSelectedNotif(null)} 
+          onDelete={deleteNotif}
+      />
     </div>
   );
 };

@@ -104,12 +104,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
            {(['ADMIN', 'PRINCIPAL', 'TECHNICIAN'].includes(currentUser.role)) && (
             <>
                {(isOpen || isMobile) && <p className="px-4 pt-6 pb-2 text-[9px] font-black text-blue-500 uppercase tracking-[0.2em]">System Control</p>}
-               <NavItem icon={<BiShield size={20}/>} label="Administration" isOpen={isOpen || isMobile} href="/admin/users" active={pathname === '/admin/users'} />
+               <NavItem icon={<BiShield size={20}/>} label="Administration" isOpen={isOpen || isMobile} href="/admin" active={pathname === '/admin'} />
             </>
            )}
 
            {currentUser.role === 'TECHNICIAN' && (
-             <NavItem icon={<BiTerminal size={20}/>} label="Dev Console" isOpen={isOpen || isMobile} href="/admin/console" active={pathname === '/admin/console'} />
+             <NavItem icon={<BiTerminal size={20}/>} label="Dev Console" isOpen={isOpen || isMobile} href="dev-console" active={pathname === 'dev-console'} />
            )}
 
            <div className="pt-6">

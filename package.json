@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@splinetool/react-spline": "^4.1.0",
+    "firebase": "^12.8.0",
     "framer-motion": "^12.23.12",
     "gsap": "^3.13.0",
     "next": "15.4.6",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4.1.18",
+    "@types/react": "19.2.9",
     "autoprefixer": "^10.4.23",
     "eslint": "^9",
     "eslint-config-next": "15.4.6",

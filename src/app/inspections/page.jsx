@@ -1,8 +1,9 @@
 "use client";
-import { useState } from 'react';
-import Sidebar from '@/app/components/Sidebar';
-import InspectionPicker from '@/app/components/InspectionPicker';
-import { inspectionLayout } from '@/app/Data/inspection_questions';
+import { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar';
+import InspectionPicker from '../components/InspectionPicker';
+import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { db } from '../Config/firebaseConfig';
 import { 
   FaCheck, FaTimes, FaPlus, FaBuilding, 
   FaGhost, FaArrowRight, FaTrash, FaSearch, 
@@ -21,9 +22,8 @@ const InspectionHub = () => {
   const [isGamingOpen, setIsGamingOpen] = useState(false);
   
   // DATA STATE
-  const [inspections, setInspections] = useState([
-    { id: 101, unit: 'HILLCREST 404', date: '12/02/2026', status: 'booked', rooms: ['Kitchen', 'Bathroom', 'Lounge'] },
-  ]);
+  const [inspections, setInspections] = useState([]);
+  const [inspectionKeys, setInspectionKeys] = useState([]);
 
   // ENGINE STATE
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -36,26 +36,59 @@ const InspectionHub = () => {
   // KEY HANDOVER STATE
   const [keyData, setKeyData] = useState({
       setsReceived: 0,
-      setsExpected: 2,
+      setsExpected: 0,
       remotes: 'Working',
       tags: 'Working'
   });
 
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const inspectionsSnapshot = await getDocs(collection(db, "inspections"));
+        const inspectionsData = inspectionsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setInspections(inspectionsData);
+
+        const keysSnapshot = await getDocs(collection(db, "inspectionKeys"));
+        const keysData = keysSnapshot.docs.map(doc => doc.data().key);
+        setInspectionKeys(keysData);
+      } catch (error) {
+        console.error("Error fetching inspections:", error);
+      }
+    };
+    fetchData();
+  }, []);
+
   // --- ACTIONS ---
 
-  const handleNewBooking = (bookingData) => {
+  const handleNewBooking = async (bookingData) => {
     const newBooking = {
-      id: Date.now(),
       unit: bookingData.unit,
-      rooms: bookingData.rooms, // "Keys" is auto-added
+      rooms: bookingData.rooms,
       status: 'booked',
       date: bookingData.date,
       time: bookingData.time,
       inspector: bookingData.inspector,
       results: {}
     };
-    setInspections([newBooking, ...inspections]);
-    setIsPickerOpen(false);
+    try {
+      const docRef = await addDoc(collection(db, "inspections"), newBooking);
+      setInspections([{ id: docRef.id, ...newBooking }, ...inspections]);
+      setIsPickerOpen(false);
+    } catch (error) {
+      console.error("Error adding inspection:", error);
+    }
+  };
+
+  const deleteInspection = async (inspectionId) => {
+    try {
+      await deleteDoc(doc(db, "inspections", inspectionId));
+      setInspections(prev => prev.filter(x => x.id !== inspectionId));
+    } catch (error) {
+      console.error("Error deleting inspection:", error);
+    }
   };
 
   const startInspection = (inspection) => {
@@ -69,11 +102,12 @@ const InspectionHub = () => {
 
   const getQuestions = (room) => {
     if (room === 'Keys') return {}; // Handled by custom UI
-    let qs = { ...inspectionLayout.essentials };
-    const key = Object.keys(inspectionLayout.extras).find(k => room.includes(k));
-    if (key) qs = { ...qs, ...inspectionLayout.extras[key] };
+    const qs = {};
+    inspectionKeys.forEach(key => {
+      qs[key] = ['Pass', 'Fail', 'N/A'];
+    });
     if (customItems[room] && customItems[room].length > 0) {
-        qs = { ...qs, "Custom Additions": customItems[room] };
+        qs["Custom Additions"] = customItems[room];
     }
     return qs;
   };
@@ -192,7 +226,7 @@ const InspectionHub = () => {
                     {ins.rooms.length > 3 && <span className="text-[7px] font-black text-slate-400">+{ins.rooms.length - 3}</span>}
                 </div>
                 <div className="mt-8 pt-4 border-t border-slate-50 flex justify-between items-center">
-                  <button onClick={() => { if(confirm("Delete?")) setInspections(prev => prev.filter(x => x.id !== ins.id))}} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><FaTrash size={12}/></button>
+                  <button onClick={() => { if(confirm("Delete?")) deleteInspection(ins.id)}} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><FaTrash size={12}/></button>
                   {filter === 'booked' ? (
                     <button onClick={() => startInspection(ins)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl text-[9px] font-black uppercase flex items-center space-x-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">
                       <span>Start Mission</span> <FaArrowRight />
@@ -248,17 +282,25 @@ const InspectionHub = () => {
                                 {/* SETS COUNTER */}
                                 <div className="bg-white p-4 rounded-2xl mb-4 flex justify-between items-center shadow-sm">
                                     <span className="text-xs font-bold uppercase text-slate-500">Sets Received</span>
-                                    <div className="flex items-center gap-4">
-                                        <button onClick={() => setKeyData({...keyData, setsReceived: Math.max(0, keyData.setsReceived - 1)})} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 font-bold">-</button>
-                                        <span className="text-xl font-black text-slate-900">{keyData.setsReceived}</span>
-                                        <button onClick={() => setKeyData({...keyData, setsReceived: keyData.setsReceived + 1})} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 font-bold">+</button>
-                                    </div>
+                                    <input 
+                                        type="number" 
+                                        value={keyData.setsReceived} 
+                                        onChange={(e) => setKeyData({...keyData, setsReceived: parseInt(e.target.value) || 0})} 
+                                        className="w-16 text-center text-xl font-black text-slate-900 border rounded-lg px-2 py-1" 
+                                        min="0"
+                                    />
                                 </div>
 
                                 {/* EXPECTED */}
                                 <div className="bg-white p-4 rounded-2xl mb-4 flex justify-between items-center shadow-sm">
                                     <span className="text-xs font-bold uppercase text-slate-500">Sets Expected</span>
-                                    <span className="text-xl font-black text-slate-900">{keyData.setsExpected}</span>
+                                    <input 
+                                        type="number" 
+                                        value={keyData.setsExpected} 
+                                        onChange={(e) => setKeyData({...keyData, setsExpected: parseInt(e.target.value) || 0})} 
+                                        className="w-16 text-center text-xl font-black text-slate-900 border rounded-lg px-2 py-1" 
+                                        min="0"
+                                    />
                                 </div>
 
                                 {/* REMOTES */}
@@ -266,9 +308,9 @@ const InspectionHub = () => {
                                     <div className="bg-white p-4 rounded-2xl shadow-sm">
                                         <p className="text-[10px] font-bold uppercase text-slate-400 mb-2">Remotes</p>
                                         <div className="flex gap-2">
-                                            {['Working', 'Dead', 'Missing'].map(status => (
+                                            {['Working', 'Dead', 'Missing', 'N/A'].map(status => (
                                                 <button key={status} onClick={() => setKeyData({...keyData, remotes: status})} 
-                                                    className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg border ${keyData.remotes === status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                                                    className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg border ${keyData.remotes === status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'} ${status === 'N/A' ? 'line-through' : ''}`}>
                                                     {status}
                                                 </button>
                                             ))}
@@ -277,9 +319,9 @@ const InspectionHub = () => {
                                     <div className="bg-white p-4 rounded-2xl shadow-sm">
                                         <p className="text-[10px] font-bold uppercase text-slate-400 mb-2">Tags/Fobs</p>
                                         <div className="flex gap-2">
-                                            {['Working', 'Dead', 'Missing'].map(status => (
+                                            {['Working', 'Dead', 'Missing', 'N/A'].map(status => (
                                                 <button key={status} onClick={() => setKeyData({...keyData, tags: status})} 
-                                                    className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg border ${keyData.tags === status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'}`}>
+                                                    className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg border ${keyData.tags === status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'} ${status === 'N/A' ? 'line-through' : ''}`}>
                                                     {status}
                                                 </button>
                                             ))}

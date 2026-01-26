@@ -1,26 +1,89 @@
 "use client";
-import { useState } from 'react';
-import Sidebar from '@/app/components/Sidebar'; 
+import { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar'; 
 import Link from 'next/link';
 import { 
   FaCar, FaHeadset, FaSoap, FaUserFriends, FaBell, 
   FaTools, FaClipboardCheck, FaBuilding, FaChevronRight, FaCircle, 
   FaTimes, FaUser, FaBars
 } from "react-icons/fa";
-
-/* --- MOCK DATA: FLEET LOG --- */
-const FLEET_DATA = [
-  { id: 'C1', model: 'VW Polo (FP 22)', status: 'ACTIVE', driver: 'Kally', job: 'Unit 408: Leaking Sink', tripsToday: 2 },
-  { id: 'C2', model: 'Isuzu Bakkie', status: 'ACTIVE', driver: 'Rasta', job: 'Hardware: Tiles', tripsToday: 3 },
-  { id: 'C3', model: 'Mahindra PikUp', status: 'ACTIVE', driver: 'Johannes', job: 'Unit 102: Paint', tripsToday: 5 }, // Most Used
-  { id: 'C4', model: 'Toyota Hilux', status: 'PARKED', driver: null, job: null, tripsToday: 1 },
-  { id: 'C5', model: 'Nissan NP200', status: 'PARKED', driver: null, job: null, tripsToday: 0 },
-  { id: 'C6', model: 'Hyundai i10', status: 'PARKED', driver: null, job: null, tripsToday: 0 },
-  { id: 'C7', model: 'Ford Ranger', status: 'ACTIVE', driver: 'Peter', job: 'Commune 4: Garden', tripsToday: 1 },
-];
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../Config/firebaseConfig';
 
 const DashboardPage = () => {
   const [isOpen, setIsOpen] = useState(true);
+  const [fleet, setFleet] = useState([]);
+  const [buildings, setBuildings] = useState([]);
+  const [inspectionsCount, setInspectionsCount] = useState(0);
+  const [maintenanceCount, setMaintenanceCount] = useState(0);
+  const [cleaningCount, setCleaningCount] = useState(0);
+  const [viewingsCount, setViewingsCount] = useState(0);
+  const [helpdeskCount, setHelpdeskCount] = useState(0);
+  const [notificationsCount, setNotificationsCount] = useState(0);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch cars
+        const carsSnapshot = await getDocs(collection(db, "cars"));
+        const carsData = carsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          model: doc.data().name,
+          status: doc.data().status || 'Available',
+          driver: null,
+          job: null,
+          tripsToday: 0
+        }));
+        setFleet(carsData);
+
+        // Fetch buildings
+        const buildingsSnapshot = await getDocs(collection(db, "buildings"));
+        const buildingsData = buildingsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          name: doc.data().name,
+          type: doc.data().type || 'Flat',
+          units: doc.data().units || []
+        }));
+        setBuildings(buildingsData);
+
+        // Fetch inspections count
+        const inspectionsSnapshot = await getDocs(collection(db, "inspections"));
+        setInspectionsCount(inspectionsSnapshot.size);
+
+        // Fetch maintenance count (active/pending maintenance jobs)
+        const maintenanceSnapshot = await getDocs(collection(db, "maintenance"));
+        setMaintenanceCount(maintenanceSnapshot.size);
+
+        // Fetch cleaning count (ongoing cleanings)
+        const cleaningSnapshot = await getDocs(collection(db, "cleanings"));
+        const ongoingCleanings = cleaningSnapshot.docs.filter(doc => doc.data().status !== 'Completed').length;
+        setCleaningCount(ongoingCleanings);
+
+        // Fetch viewings count (pending viewings)
+        const viewingsSnapshot = await getDocs(collection(db, "viewings"));
+        setViewingsCount(viewingsSnapshot.size);
+
+        // Fetch helpdesk count (unread messages)
+        const helpdeskSnapshot = await getDocs(collection(db, "helpdesk"));
+        const unreadMessages = helpdeskSnapshot.docs.filter(doc => !doc.data().read).length;
+        setHelpdeskCount(unreadMessages);
+
+        // Fetch notifications count (active alerts)
+        const notificationsSnapshot = await getDocs(collection(db, "notifications"));
+        const activeNotifications = notificationsSnapshot.docs.filter(doc => doc.data().status === 'active').length;
+        setNotificationsCount(activeNotifications);
+
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const totalBuildings = buildings.length;
+  const totalUnits = buildings.reduce((sum, b) => sum + b.units.length, 0);
+  const flatsCount = buildings.filter(b => b.type === 'Flat').reduce((sum, b) => sum + b.units.length, 0);
+  const communesCount = buildings.filter(b => b.type === 'Commune').reduce((sum, b) => sum + b.units.length, 0);
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-900 font-sans">
@@ -70,30 +133,30 @@ const DashboardPage = () => {
           {/* 1. INSPECTIONS */}
           <ActiveJobTile 
             col="col-span-1 md:col-span-3" row="row-span-2"
-            icon={<FaClipboardCheck />} title="Inspections" count={12} color="bg-blue-600" subtext="Booked"
+            icon={<FaClipboardCheck />} title="Inspections" count={inspectionsCount} color="bg-blue-600" subtext="Booked"
           />
 
           {/* 2. MAINTENANCE */}
           <ActiveJobTile 
             col="col-span-1 md:col-span-3" row="row-span-2"
-            icon={<FaTools />} title="Maintenance" count={15} color="bg-red-500" subtext="Active"
+            icon={<FaTools />} title="Maintenance" count={maintenanceCount} color="bg-red-500" subtext="Active"
           />
 
           {/* 3. FLEET CARD (POP-OUT) - Full Width on Mobile */}
           <div className="col-span-2 md:col-span-6 row-span-2 relative z-10 h-[250px] md:h-auto">
-             <SmartFleetCard fleet={FLEET_DATA} />
+             <SmartFleetCard fleet={fleet} />
           </div>
 
           {/* 4. CLEANING - Full Width on Mobile */}
           <ActiveJobTile 
             col="col-span-2 md:col-span-4" row="row-span-2"
-            icon={<FaSoap />} title="Cleaning" count={20} color="bg-green-600" subtext="Units in queue"
+            icon={<FaSoap />} title="Cleaning" count={cleaningCount} color="bg-green-600" subtext="Units in queue"
           />
 
           {/* 5. VIEWINGS */}
           <ActiveJobTile 
             col="col-span-1 md:col-span-3" row="row-span-2"
-            icon={<FaUserFriends />} title="Viewings" count={8} color="bg-purple-600" subtext="Pending"
+            icon={<FaUserFriends />} title="Viewings" count={viewingsCount} color="bg-purple-600" subtext="Pending"
           />
 
           {/* 6. INVENTORY BLOCK - Full Width on Mobile */}
@@ -104,12 +167,12 @@ const DashboardPage = () => {
              </div>
              <div className="flex justify-between items-end">
                 <div>
-                    <p className="text-3xl font-black tracking-tighter italic leading-none">316</p>
+                    <p className="text-3xl font-black tracking-tighter italic leading-none">{totalUnits}</p>
                     <p className="text-[8px] font-black uppercase text-slate-400">Total Units</p>
                 </div>
                 <div className="text-right space-y-1">
-                    <p className="text-xs font-black italic uppercase">Flats: <span className="text-blue-600">16</span></p>
-                    <p className="text-xs font-black italic uppercase">Commune: <span className="text-orange-500">300</span></p>
+                    <p className="text-xs font-black italic uppercase">Flats: <span className="text-blue-600">{flatsCount}</span></p>
+                    <p className="text-xs font-black italic uppercase">Commune: <span className="text-orange-500">{communesCount}</span></p>
                 </div>
              </div>
           </div>
@@ -122,7 +185,7 @@ const DashboardPage = () => {
                   <span className="text-[10px] font-black bg-white/20 px-2 py-1 rounded-lg">LIVE</span>
                </div>
                <div>
-                  <p className="text-2xl font-black italic leading-none mb-1">24</p>
+                  <p className="text-2xl font-black italic leading-none mb-1">{helpdeskCount}</p>
                   <p className="text-[8px] font-black uppercase tracking-widest opacity-80 italic">Unread</p>
                </div>
             </div>
@@ -136,7 +199,7 @@ const DashboardPage = () => {
                   <div className="w-2 h-2 bg-red-500 rounded-full animate-ping"></div>
                </div>
                <div>
-                  <p className="text-2xl font-black italic leading-none mb-1 text-red-500">03</p>
+                  <p className="text-2xl font-black italic leading-none mb-1 text-red-500">{notificationsCount}</p>
                   <p className="text-[8px] font-black uppercase tracking-widest text-slate-500 italic">Alerts</p>
                </div>
             </div>
@@ -178,7 +241,7 @@ const SmartFleetCard = ({ fleet }) => {
   // Stats Logic
   const totalCars = fleet.length;
   const activeCars = fleet.filter(c => c.status === 'ACTIVE').length;
-  const mostUsedCar = fleet.reduce((prev, current) => (prev.tripsToday > current.tripsToday) ? prev : current);
+  const mostUsedCar = fleet.length > 0 ? fleet.reduce((prev, current) => (prev.tripsToday > current.tripsToday) ? prev : current) : null;
 
   return (
     <>
@@ -243,8 +306,14 @@ const SmartFleetCard = ({ fleet }) => {
                 </div>
                 <div className="flex flex-col items-center justify-center text-center">
                     <span className="text-[8px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Busiest</span>
-                    <span className="text-sm md:text-xl font-black text-orange-500 italic leading-none">{mostUsedCar.model}</span>
-                    <span className="text-[8px] md:text-[9px] font-bold text-slate-500 uppercase">{mostUsedCar.tripsToday} Trips</span>
+                    {mostUsedCar ? (
+                      <>
+                        <span className="text-sm md:text-xl font-black text-orange-500 italic leading-none">{mostUsedCar.model}</span>
+                        <span className="text-[8px] md:text-[9px] font-bold text-slate-500 uppercase">{mostUsedCar.tripsToday} Trips</span>
+                      </>
+                    ) : (
+                      <span className="text-sm md:text-xl font-black text-slate-500 italic leading-none">No Data</span>
+                    )}
                 </div>
             </div>
 
