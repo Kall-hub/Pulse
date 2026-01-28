@@ -1023,13 +1023,13 @@ const InspectionHub = () => {
                                 </div>
 
                                 {/* REMOTES */}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="bg-white p-4 rounded-2xl shadow-sm">
                                         <p className="text-[10px] font-bold uppercase text-slate-400 mb-2">Remotes</p>
-                                        <div className="flex gap-2">
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                             {['Working', 'Dead', 'Missing', 'N/A'].map(status => (
                                                 <button key={status} onClick={() => setKeyData({...keyData, remotes: status})} 
-                                                    className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg border ${keyData.remotes === status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'} ${status === 'N/A' ? 'line-through' : ''}`}>
+                                                    className={`py-2 text-[8px] font-black uppercase rounded-lg border ${keyData.remotes === status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'} ${status === 'N/A' ? 'line-through' : ''}`}>
                                                     {status}
                                                 </button>
                                             ))}
@@ -1037,10 +1037,10 @@ const InspectionHub = () => {
                                     </div>
                                     <div className="bg-white p-4 rounded-2xl shadow-sm">
                                         <p className="text-[10px] font-bold uppercase text-slate-400 mb-2">Tags/Fobs</p>
-                                        <div className="flex gap-2">
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                             {['Working', 'Dead', 'Missing', 'N/A'].map(status => (
                                                 <button key={status} onClick={() => setKeyData({...keyData, tags: status})} 
-                                                    className={`flex-1 py-2 text-[8px] font-black uppercase rounded-lg border ${keyData.tags === status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'} ${status === 'N/A' ? 'line-through' : ''}`}>
+                                                    className={`py-2 text-[8px] font-black uppercase rounded-lg border ${keyData.tags === status ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-400 border-slate-100'} ${status === 'N/A' ? 'line-through' : ''}`}>
                                                     {status}
                                                 </button>
                                             ))}

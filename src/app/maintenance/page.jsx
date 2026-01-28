@@ -482,6 +482,11 @@ const MaintenancePage = () => {
                       </div>
                     </div>
 
+                    <div className="border-2 border-slate-900 rounded-xl p-4">
+                      <p className="text-[10px] font-black uppercase text-slate-500">LMS Ticket Number</p>
+                      <div className="mt-2 h-10 border-2 border-slate-900 rounded-lg"></div>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-3">
                       <div className="border-2 border-slate-900 rounded-xl p-4">
                         <p className="text-[10px] font-black uppercase text-slate-500">Receipt Date</p>
