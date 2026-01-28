@@ -112,6 +112,57 @@ const CleaningPage = () => {
     }
   };
 
+  // BULK CLEANING JOB FROM INSPECTION
+  const bookCleaningFromInspection = async (unit, cleaningItems, cleaner = 'Lindiwe') => {
+    try {
+      // Group items by room to zones mapping
+      const roomToZone = {
+        'Kitchen': 'kit',
+        'Bathroom': 'bath',
+        'Bedroom': 'bed',
+        'Lounge': 'lounge',
+        'Living Room': 'lounge'
+      };
+
+      // Build zones with tasks from cleaning items
+      const zoneMap = {};
+      cleaningItems.forEach(({ room, item }) => {
+        const zone = roomToZone[room] || 'lounge';
+        if (!zoneMap[zone]) {
+          zoneMap[zone] = { id: zone, name: ZONES[zone].name, tasks: [] };
+        }
+        zoneMap[zone].tasks.push({ name: item, level: 'std', done: false });
+      });
+
+      const selectedZones = Object.values(zoneMap);
+      
+      const newCleaning = {
+        unit: unit.toUpperCase(),
+        cleaner: cleaner,
+        serviceDate: '',
+        time: '',
+        zones: selectedZones,
+        bookedOn: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase(),
+        status: 'Booked',
+        fromInspection: true,
+        inspectionUnit: unit
+      };
+
+      const docRef = await addDoc(collection(db, "cleanings"), newCleaning);
+      setJobs([{ id: docRef.id, ...newCleaning }, ...jobs]);
+      
+      return { success: true, id: docRef.id };
+    } catch (error) {
+      console.error("Error booking cleaning from inspection:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Make this function available globally for inspection page
+  useEffect(() => {
+    window.bookCleaningFromInspection = bookCleaningFromInspection;
+  }, [jobs]);
+
   const deleteCleaning = async (cleaningId) => {
     try {
       await deleteDoc(doc(db, "cleanings", cleaningId));
@@ -385,7 +436,7 @@ const CleaningCard = ({ unit, cleaner, bookedOn, serviceDate, time, status, zone
       <div className="flex items-start space-x-5 w-full">
         <div className={`p-4 rounded-2xl shadow-lg text-white shrink-0 ${status === 'Completed' ? 'bg-slate-400' : 'bg-blue-600'}`}><FaSoap size={20} /></div>
         <div className="w-full">
-          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tighter uppercase italic leading-none mb-2 break-words">{unit}</h2>
+          <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tighter uppercase italic leading-none mb-2 break-normal">{unit}</h2>
           <div className="flex items-center space-x-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">
             <FaUserAlt size={8} className="text-blue-500" />
             <span>{cleaner}</span>

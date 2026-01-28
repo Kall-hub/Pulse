@@ -1,8 +1,9 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from '../Config/firebaseConfig'; 
+import { auth, db } from '../Config/firebaseConfig'; 
+import { collection, getDocs, addDoc, deleteDoc, doc } from "firebase/firestore";
 
 import { FaShieldAlt, FaLock, FaUserShield, FaChevronRight, FaUserTie, FaCode } from "react-icons/fa";
 import { BiPulse } from "react-icons/bi";
@@ -15,6 +16,8 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(''); 
   const [loading, setLoading] = useState(false); 
+  const [accounts, setAccounts] = useState([]);
+  const [newAccount, setNewAccount] = useState({ email: '', password: '', role: 'STAFF' });
 
   const router = useRouter();
 
@@ -28,7 +31,14 @@ const LoginPage = () => {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      console.log("Logged in as:", user.email);
+      console.log("Logged in as:", user.email); 
+
+      // 1.1 Set session cookie (clears on browser close)
+      try {
+        document.cookie = "pulse_auth=1; path=/; SameSite=Lax";
+      } catch (cookieErr) {
+        console.warn("Cookie set failed:", cookieErr);
+      }
 
       // 2. ROUTING BASED ON TAB
       if (loginMode === 'ADMIN') {
@@ -85,7 +95,48 @@ const LoginPage = () => {
 
   const config = getModeConfig();
 
+  // FETCH LOGIN ACCOUNTS FROM FIRESTORE
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      try {
+        const snap = await getDocs(collection(db, "loginAccounts"));
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setAccounts(data);
+      } catch (err) {
+        console.error("Error loading login accounts", err);
+      }
+    };
+    fetchAccounts();
+  }, []);
+
+  const handleAddAccount = async (e) => {
+    e.preventDefault();
+    if (!newAccount.email || !newAccount.password) return;
+    try {
+      const docRef = await addDoc(collection(db, "loginAccounts"), {
+        email: newAccount.email,
+        password: newAccount.password,
+        role: newAccount.role,
+        createdAt: new Date().toISOString()
+      });
+      setAccounts([{ id: docRef.id, ...newAccount }, ...accounts]);
+      setNewAccount({ email: '', password: '', role: 'STAFF' });
+    } catch (err) {
+      console.error("Error adding account", err);
+    }
+  };
+
+  const handleDeleteAccount = async (id) => {
+    try {
+      await deleteDoc(doc(db, "loginAccounts", id));
+      setAccounts(accounts.filter(acc => acc.id !== id));
+    } catch (err) {
+      console.error("Error deleting account", err);
+    }
+  };
+
   return (
+    <>
     <div className="min-h-screen w-full flex items-center justify-center bg-[#020617] relative overflow-hidden">
       
       {/* ANIMATED BACKGROUND */}
@@ -93,7 +144,7 @@ const LoginPage = () => {
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-white/5 rounded-full blur-[120px]"></div>
 
       {/* GLASS CARD */}
-      <div className="relative w-full max-w-[440px] px-6">
+      <div className="relative w-full max-w-110 px-6">
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[3rem] p-10 shadow-2xl shadow-black/50 transition-all duration-500">
           
           {/* THE SWAP TOGGLER */}
@@ -184,6 +235,72 @@ const LoginPage = () => {
         </div>
       </div>
     </div>
+
+    {/* ACCOUNTS MANAGEMENT (Firestore) */}
+    <div className="w-full max-w-4xl mx-auto mt-10 px-4 pb-16">
+      <div className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 text-white">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Database Accounts</p>
+            <h2 className="text-2xl font-black">Stored Logins</h2>
+            <p className="text-sm text-slate-400">Add or remove allowed login records (email / password / role).</p>
+          </div>
+          <form onSubmit={handleAddAccount} className="grid grid-cols-1 md:grid-cols-4 gap-3 w-full md:w-auto">
+            <input
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-wide outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Email"
+              value={newAccount.email}
+              onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+              required
+            />
+            <input
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-wide outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Password"
+              value={newAccount.password}
+              onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
+              required
+            />
+            <select
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-wide outline-none focus:ring-2 focus:ring-blue-500"
+              value={newAccount.role}
+              onChange={(e) => setNewAccount({ ...newAccount, role: e.target.value })}
+            >
+              <option value="STAFF">Staff</option>
+              <option value="ADMIN">Admin</option>
+              <option value="DEV">Dev</option>
+            </select>
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-4 py-3 text-xs font-black uppercase tracking-wide"
+            >
+              Add
+            </button>
+          </form>
+        </div>
+
+        <div className="grid gap-3">
+          {accounts.length === 0 && (
+            <div className="text-slate-400 text-sm">No stored accounts found.</div>
+          )}
+          {accounts.map(acc => (
+            <div key={acc.id} className="flex flex-col md:flex-row md:items-center md:justify-between bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+              <div className="space-y-1">
+                <p className="text-sm font-black uppercase">{acc.email}</p>
+                <p className="text-[10px] uppercase text-slate-400">Role: {acc.role || 'STAFF'}</p>
+                <p className="text-[10px] text-slate-500">Password: {acc.password}</p>
+              </div>
+              <button
+                onClick={() => handleDeleteAccount(acc.id)}
+                className="mt-3 md:mt-0 text-[10px] font-black uppercase text-red-400 hover:text-red-200"
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+    </>
   );
 };
 

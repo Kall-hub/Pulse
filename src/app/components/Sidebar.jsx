@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link'; 
 import { usePathname, useRouter } from 'next/navigation'; 
+import { signOut } from 'firebase/auth';
+import { auth } from '../Config/firebaseConfig';
 import { 
   BiChevronLeft, BiGridAlt, BiBuildings, BiWrench, 
   BiCheckShield, BiBrush, BiShow, BiHelpCircle,
@@ -29,17 +31,33 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // 2.1 Client-side auth guard to prevent back navigation showing protected pages
+  useEffect(() => {
+    try {
+      const hasAuth = document.cookie.split('; ').some(c => c.startsWith('pulse_auth='));
+      if (!hasAuth) {
+        router.replace('/login');
+      }
+    } catch (e) {}
+  }, [router]);
+
   // 2. Auto-close on Mobile when route changes
   useEffect(() => {
     if (isMobile) setIsOpen(false);
   }, [pathname, isMobile, setIsOpen]);
 
   // 3. Logout Function (Redirects to /login)
-  const handleLogout = () => {
-    if(confirm("Sign out of OC Pulse?")) {
-        setShowProfileCard(false);
-        router.push('/login'); 
-    }
+  const handleLogout = async () => {
+    if(!confirm("Sign out of OC Pulse?")) return;
+    try {
+      await signOut(auth);
+    } catch (e) {}
+    // Clear session cookie
+    try {
+      document.cookie = 'pulse_auth=; Max-Age=0; path=/; SameSite=Lax';
+    } catch (e) {}
+    setShowProfileCard(false);
+    router.push('/login');
   };
 
   return (
@@ -139,7 +157,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
       {/* --- SIMPLIFIED PROFILE MODAL --- */}
       {showProfileCard && (
-         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={() => setShowProfileCard(false)}>
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-in fade-in" onClick={() => setShowProfileCard(false)}>
            <div 
              className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 relative overflow-hidden shadow-2xl animate-in zoom-in-95"
              onClick={(e) => e.stopPropagation()} 

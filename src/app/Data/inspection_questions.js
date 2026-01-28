@@ -1,30 +1,91 @@
-export const inspectionLayout = {
-  // 1. ESSENTIALS (Appear in every room)
-  essentials: {
-    "Finishes": ["Ceiling / Cornice", "Walls / Paint", "Floor / Skirting", "Doors / Locks / Handles"],
-    "Electrical": ["Light Switch", "Power Sockets", "Light Fitting / Globe"],
-    "Windows": ["Glass / Putty", "Handles / Latches", "Burglar Bars", "Blinds / Rails"]
-  },
+export const SHARED_ITEMS = [
+  "Walls",
+  "Tile wall",
+  "Ceiling",
+  "Floor",
+  "Windows",
+  "Doors",
+  "Curtain Rail / Blinds",
+  "Lights / Globes",
+  "Plugs / Sockets",
+  "Light Switches"
+];
 
-  // 2. EXTRAS (Room specific)
-  extras: {
-    "Kitchen": {
-      "Cooking": ["Stove Plates", "Oven Interior", "Oven Element", "Oven Light", "Control Knobs", "Extractor Fan"],
-      "Wet Area": ["Sink Basin", "Tap Mechanism (Leaks)", "Drain / Plug", "Under-Counter Pipes"],
-      "Storage": ["Cupboards (Hinges)", "Drawers (Runners)", "Countertops"]
-    },
-    "Bathroom": {
-      "Ventilation": ["Extractor Fan", "Window Mechanism"],
-      "Basin Area": ["Basin Condition", "Taps (Leak Check)", "Mirror / Cabinet"],
-      "Washing": ["Shower (Door/Floor)", "Bathtub", "Towel Rails (Loose?)"],
-      "Toilet": ["Mechanism / Flush", "Seat / Lid", "Leaks"]
-    },
-    "Lounge": {
-      "Structure": ["Staircase / Railing", "Patio Door / Security Gate"],
-      "Fixtures": ["Lampshades", "Built-in Cupboards"]
-    },
-    "Bedroom": {
-      "Storage": ["Built-in Cupboards", "Hinges / Handles"],
-    }
-  }
+export const inspectionLayout = {
+  Kitchen: {
+    Core: SHARED_ITEMS,
+    Appliances: [
+      "Stove / Oven",
+      "Extractor / Hob",
+      "Fridge / Freezer",
+      "Microwave Space"
+    ],
+    Plumbing: [
+      "Sink / Basin",
+      "Taps",
+      "Drains / Trap",
+      "Cabinets & Counters"
+    ],
+  },
+  Bathroom: {
+    Core: SHARED_ITEMS,
+    Plumbing: [
+      "Toilet",
+      "Basin",
+      "Shower",
+      "shower head",
+      "Bath",
+      "Taps & Mixers",
+      "Drains / Trap"
+    ],
+    Fixtures: [
+      "Mirror / Cabinet",
+      "Towel Rails / Hooks"
+    ],
+  },
+  Lounge: {
+    Core: SHARED_ITEMS,
+    Fixtures: [
+      "Curtains / Blinds",
+      "Balcony Door / Slider",
+      "Intercom / Bell"
+    ],
+  },
+  Bedroom: {
+    Core: SHARED_ITEMS,
+    Storage: [
+      "Wardrobe / Cupboards",
+      "Curtains / Blinds"
+    ],
+  },
+  Utilities: {
+    Core: [
+      "Walls",
+      "Ceiling",
+      "Floor",
+      "Lights / Globes"
+    ],
+    Equipment: [
+      "Water Heater",
+      "Electrical Panel",
+      "Gas Meter",
+      "Storage Shelves"
+    ],
+  },
+  Exterior: {
+    Core: [
+      "Walls",
+      "Windows",
+      "Doors",
+      "Lights"
+    ],
+    Landscaping: [
+      "Front Garden / Yard",
+      "Patio / Deck",
+      "Fence / Gates",
+      "Letterbox"
+    ],
+  },
 };
+
+export default inspectionLayout;
