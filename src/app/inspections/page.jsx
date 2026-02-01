@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import InspectionPicker from '../components/InspectionPicker';
 import Loading from './loading';
-import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../Config/firebaseConfig';
 import inspectionLayout from '../Data/inspection_questions';
 import { 
@@ -217,40 +217,96 @@ const InspectionHub = () => {
   };
 
   // JOB LOGGING FUNCTIONS
-  const addCleaningJob = () => {
-    if (!selectedCleaningItem || !cleaningFormData.serviceType) return;
+  const addCleaningJob = async () => {
+    if (!selectedCleaningItem || !cleaningFormData.serviceType || !viewingReport?.unit) return;
     
     const jobId = `${viewingReport.id}-cleaning-${Date.now()}`;
     const newJob = {
       id: jobId,
+      unit: viewingReport.unit,
       ...selectedCleaningItem,
       ...cleaningFormData,
       createdAt: new Date().toISOString(),
       status: 'pending'
     };
+
+    const zoneTaskName = `${selectedCleaningItem.room} - ${selectedCleaningItem.item}`;
+    const payload = {
+      unit: viewingReport.unit.toUpperCase(),
+      cleaner: cleaningFormData.contactName || 'Unassigned',
+      serviceDate: '',
+      time: cleaningFormData.time || '',
+      zones: [
+        {
+          id: 'inspection',
+          name: 'Inspection Items',
+          tasks: [{ name: zoneTaskName, level: cleaningFormData.serviceType || 'std', done: false }]
+        }
+      ],
+      bookedOn: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase(),
+      status: 'Booked',
+      fromInspection: true,
+      inspectionUnit: viewingReport.unit.toUpperCase(),
+      inspectionId: viewingReport.id,
+      notes: cleaningFormData.notes || ''
+    };
     
-    setCleaningJobs(prev => ({ ...prev, [jobId]: newJob }));
-    setShowCleaningForm(false);
-    setCleaningFormData({ serviceType: 'std', notes: '', contactName: '', time: '' });
-    setSelectedCleaningItem(null);
+    try {
+      const docRef = await addDoc(collection(db, "cleanings"), payload);
+      setCleaningJobs(prev => ({ ...prev, [docRef.id]: { ...newJob, id: docRef.id } }));
+      setShowCleaningForm(false);
+      setCleaningFormData({ serviceType: 'std', notes: '', contactName: '', time: '' });
+      setSelectedCleaningItem(null);
+    } catch (error) {
+      console.error("Error booking cleaning from inspection:", error);
+      alert("Failed to book cleaning. Please retry.");
+    }
   };
 
-  const addMaintenanceJob = () => {
-    if (!selectedMaintenanceItem || !maintenanceFormData.contractor || !maintenanceFormData.date) return;
+  const addMaintenanceJob = async () => {
+    if (!selectedMaintenanceItem || !maintenanceFormData.contractor || !maintenanceFormData.date || !viewingReport?.unit) return;
     
     const jobId = `${viewingReport.id}-maintenance-${Date.now()}`;
     const newJob = {
       id: jobId,
+      unit: viewingReport.unit,
       ...selectedMaintenanceItem,
       ...maintenanceFormData,
       createdAt: new Date().toISOString(),
       status: 'pending'
     };
+
+    const issueSummary = `${selectedMaintenanceItem.room}: ${selectedMaintenanceItem.item}`;
+    const payload = {
+      unit: viewingReport.unit.toUpperCase(),
+      status: 'request',
+      issue: issueSummary,
+      rawFaults: [
+        {
+          area: selectedMaintenanceItem.room,
+          description: selectedMaintenanceItem.item,
+          note: maintenanceFormData.notes || selectedMaintenanceItem.data?.note || ''
+        }
+      ],
+      loggedAt: new Date().toLocaleString(),
+      createdAt: serverTimestamp(),
+      areas: [selectedMaintenanceItem.room],
+      displayId: `REQ-${Math.floor(Math.random() * 900) + 100}`,
+      requestedContractor: maintenanceFormData.contractor,
+      requestedDate: maintenanceFormData.date,
+      requestedPriority: maintenanceFormData.priority || 'medium'
+    };
     
-    setMaintenanceJobs(prev => ({ ...prev, [jobId]: newJob }));
-    setShowMaintenanceForm(false);
-    setMaintenanceFormData({ contractor: '', date: '', priority: 'medium', notes: '' });
-    setSelectedMaintenanceItem(null);
+    try {
+      const docRef = await addDoc(collection(db, "maintenance"), payload);
+      setMaintenanceJobs(prev => ({ ...prev, [docRef.id]: { ...newJob, id: docRef.id } }));
+      setShowMaintenanceForm(false);
+      setMaintenanceFormData({ contractor: '', date: '', priority: 'medium', notes: '' });
+      setSelectedMaintenanceItem(null);
+    } catch (error) {
+      console.error("Error booking maintenance from inspection:", error);
+      alert("Failed to book maintenance. Please retry.");
+    }
   };
 
   const deleteJob = (jobId, type) => {

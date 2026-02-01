@@ -8,7 +8,7 @@ import {
   FaPlus, FaTools, FaClock, FaSearch, 
   FaCamera, FaCheckCircle, FaBars,
   FaFileSignature, FaExclamationCircle, 
-  FaTrash, FaPrint, FaArrowRight
+  FaTrash, FaPrint, FaArrowRight, FaCheck
 } from "react-icons/fa";
 
 import { db } from '../Config/firebaseConfig';
@@ -221,28 +221,42 @@ const MaintenancePage = () => {
             {/* CONTENT */}
             <div className="space-y-6">
                {/* TAB 1: REQUESTS */}
-               {activeTab === 'requests' && filteredTickets.map(ticket => (
-                  <div key={ticket.id} className="bg-white rounded-4xl border border-slate-200 p-4 md:p-6 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between group hover:border-blue-300 transition-all shadow-sm">
-                      <div className="flex gap-4 items-start md:items-center w-full">
-                        <div className="w-12 h-12 bg-red-100 text-red-500 rounded-2xl flex items-center justify-center shrink-0"><FaExclamationCircle /></div>
-                        <div className="w-full">
-                            <div className="flex justify-between items-start">
-                                <h3 className="text-lg font-black uppercase italic text-slate-900">{ticket.unit}</h3>
-                                <button onClick={() => deleteTicket(ticket.id)} className="text-slate-300 hover:text-red-500 p-2"><FaTrash size={12}/></button>
-                            </div>
-                            <div className="flex flex-wrap gap-2 mt-1">
-                               {ticket.areas && ticket.areas.map(a => <span key={a} className="text-[8px] font-black bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">{a}</span>)}
-                               <span className="text-[8px] font-bold text-slate-400 uppercase flex items-center gap-1"><FaClock size={8}/> {ticket.loggedAt}</span>
-                            </div>
-                            <p className="mt-3 text-sm font-medium text-slate-600 italic">"{ticket.issue}"</p>
+               {activeTab === 'requests' && (
+                  <>
+                     {filteredTickets.length > 0 ? (
+                        filteredTickets.map(ticket => (
+                           <div key={ticket.id} className="bg-white rounded-4xl border border-slate-200 p-4 md:p-6 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between group hover:border-blue-300 transition-all shadow-sm">
+                              <div className="flex gap-4 items-start md:items-center w-full">
+                                <div className="w-12 h-12 bg-red-100 text-red-500 rounded-2xl flex items-center justify-center shrink-0"><FaExclamationCircle /></div>
+                                <div className="w-full">
+                                    <div className="flex justify-between items-start">
+                                        <h3 className="text-lg font-black uppercase italic text-slate-900">{ticket.unit}</h3>
+                                        <button onClick={() => deleteTicket(ticket.id)} className="text-slate-300 hover:text-red-500 p-2"><FaTrash size={12}/></button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 mt-1">
+                                       {ticket.areas && ticket.areas.map(a => <span key={a} className="text-[8px] font-black bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">{a}</span>)}
+                                       <span className="text-[8px] font-bold text-slate-400 uppercase flex items-center gap-1"><FaClock size={8}/> {ticket.loggedAt}</span>
+                                    </div>
+                                    <p className="mt-3 text-sm font-medium text-slate-600 italic">"{ticket.issue}"</p>
+                                </div>
+                              </div>
+                              <button onClick={() => promoteToJobCard(ticket)} className="w-full md:w-auto bg-slate-900 text-white px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg">Approve & Assign</button>
+                           </div>
+                        ))
+                     ) : (
+                        <div className="bg-white rounded-4xl border border-slate-200 p-12 text-center">
+                           <p className="text-xl font-black uppercase text-slate-400">No maintenance requests</p>
+                           <p className="text-sm text-slate-500 mt-2">All systems are clear</p>
                         </div>
-                      </div>
-                      <button onClick={() => promoteToJobCard(ticket)} className="w-full md:w-auto bg-slate-900 text-white px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg">Approve & Assign</button>
-                  </div>
-               ))}
+                     )}
+                  </>
+               )}
 
                {/* TAB 2: ACTIVE JOBS */}
-               {activeTab === 'active' && filteredTickets.map(job => (
+               {activeTab === 'active' && (
+                  <>
+                     {filteredTickets.length > 0 ? (
+                        filteredTickets.map(job => (
                   <div key={job.id} className="bg-white rounded-4xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="px-6 md:px-8 py-5 bg-slate-50 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                       <div className="flex items-center space-x-4">
@@ -333,28 +347,47 @@ const MaintenancePage = () => {
                         </div>
                     </div>
                   </div>
-               ))}
+                        ))
+                     ) : (
+                        <div className="bg-white rounded-4xl border border-slate-200 p-12 text-center">
+                           <p className="text-xl font-black uppercase text-slate-400">No active jobs</p>
+                           <p className="text-sm text-slate-500 mt-2">All maintenance is booked</p>
+                        </div>
+                     )}
+                  </>
+               )}
 
                {/* TAB 3: HISTORY */}
-               {activeTab === 'completed' && filteredTickets.map(job => (
-                  <div key={job.id} className="bg-white rounded-4xl border border-slate-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center group hover:shadow-md transition-all gap-4">
-                      <div className="flex items-center gap-6">
-                        <div className="w-14 h-14 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center text-2xl shrink-0"><FaFileSignature /></div>
-                        <div>
-                           <h3 className="text-lg font-black uppercase italic text-slate-900">{job.unit}</h3>
-                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex flex-wrap items-center gap-2">
-                              <span>Ref: {job.displayId}</span>
-                              <span className="w-1 h-1 bg-slate-300 rounded-full hidden md:block"></span>
-                              <span>{job.completedAt}</span>
-                           </p>
+               {activeTab === 'completed' && (
+                  <>
+                     {filteredTickets.length > 0 ? (
+                        filteredTickets.map(job => (
+                           <div key={job.id} className="bg-white rounded-4xl border border-slate-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center group hover:shadow-md transition-all gap-4">
+                              <div className="flex items-center gap-6">
+                                <div className="w-14 h-14 bg-green-100 text-green-600 rounded-2xl flex items-center justify-center text-2xl shrink-0"><FaFileSignature /></div>
+                                <div>
+                                   <h3 className="text-lg font-black uppercase italic text-slate-900">{job.unit}</h3>
+                                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex flex-wrap items-center gap-2">
+                                      <span>Ref: {job.displayId}</span>
+                                      <span className="w-1 h-1 bg-slate-300 rounded-full hidden md:block"></span>
+                                      <span>{job.completedAt}</span>
+                                   </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 w-full md:w-auto">
+                                <button onClick={() => setViewingReport(job)} className="w-full md:w-auto bg-slate-100 text-slate-600 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-colors">View Report</button>
+                                <button onClick={() => deleteTicket(job.id)} className="bg-red-50 text-red-500 px-4 py-3 rounded-xl hover:bg-red-500 hover:text-white transition-colors"><FaTrash/></button>
+                              </div>
+                           </div>
+                        ))
+                     ) : (
+                        <div className="bg-white rounded-4xl border border-slate-200 p-12 text-center">
+                           <p className="text-xl font-black uppercase text-slate-400">No completed jobs</p>
+                           <p className="text-sm text-slate-500 mt-2">Maintenance history will appear here</p>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 w-full md:w-auto">
-                        <button onClick={() => setViewingReport(job)} className="w-full md:w-auto bg-slate-100 text-slate-600 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 hover:text-white transition-colors">View Report</button>
-                        <button onClick={() => deleteTicket(job.id)} className="bg-red-50 text-red-500 px-4 py-3 rounded-xl hover:bg-red-500 hover:text-white transition-colors"><FaTrash/></button>
-                      </div>
-                  </div>
-               ))}
+                     )}
+                  </>
+               )}
             </div>
           </main>
 
@@ -362,8 +395,8 @@ const MaintenancePage = () => {
           <MaintenanceForm isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onSubmit={addRequest} />
           
           {viewingReport && (
-            <div className="fixed inset-0 z-200 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white w-full max-w-2xl rounded-4xl shadow-2xl overflow-hidden">
+            <div className="fixed inset-0 z-200 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white w-full max-w-4xl rounded-4xl shadow-2xl overflow-hidden my-8">
                   <div className="bg-slate-900 p-6 md:p-8 text-white flex justify-between items-start">
                      <div>
                         <h2 className="text-2xl font-black uppercase italic">{viewingReport.unit}</h2>
@@ -371,9 +404,68 @@ const MaintenancePage = () => {
                      </div>
                      <button onClick={() => setViewingReport(null)} className="bg-white/10 p-3 rounded-full hover:bg-red-500 transition-colors"><FaTrash /></button>
                   </div>
-                  <div className="p-6 md:p-8 space-y-8">
-                     {/* Simplified View Logic */}
-                     <p>Completed Report View (Digital)</p>
+                  <div className="p-6 md:p-8 space-y-6">
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
+                           <p className="text-sm font-black text-slate-900 uppercase">{viewingReport.status || 'Unknown'}</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Contractor</p>
+                           <p className="text-sm font-black text-slate-900 uppercase">{viewingReport.contractor || 'Unassigned'}</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Priority</p>
+                           <p className={`text-sm font-black uppercase ${viewingReport.priority === 'High' ? 'text-red-600' : viewingReport.priority === 'Low' ? 'text-green-600' : 'text-orange-600'}`}>{viewingReport.priority || 'Medium'}</p>
+                        </div>
+                     </div>
+
+                     <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Issue Summary</p>
+                        <div className="bg-white border border-slate-200 rounded-2xl p-4">
+                           <p className="text-sm font-bold text-slate-700">{viewingReport.issue || 'No issue description'}</p>
+                        </div>
+                     </div>
+
+                     <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Task Checklist</p>
+                        {viewingReport.tasks && viewingReport.tasks.length > 0 ? (
+                           <div className="space-y-2">
+                              {viewingReport.tasks.map((task, idx) => (
+                                 <div key={idx} className={`p-4 rounded-2xl border flex items-start gap-3 ${task.done ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-slate-200'}`}>
+                                    <div className={`w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 ${task.done ? 'bg-green-500 text-white' : 'bg-slate-300'}`}>
+                                       {task.done && <FaCheck size={12} />}
+                                    </div>
+                                    <div className="flex-1">
+                                       <p className="text-[9px] font-black text-slate-400 uppercase">{task.area}</p>
+                                       <p className={`text-xs font-bold ${task.done ? 'line-through text-slate-400' : 'text-slate-900'}`}>{task.desc}</p>
+                                    </div>
+                                    <div className="text-right">
+                                       <p className="text-[8px] font-black text-slate-400 uppercase">Bill To</p>
+                                       <p className="text-[10px] font-black text-slate-900">{task.liability || '—'}</p>
+                                    </div>
+                                 </div>
+                              ))}
+                           </div>
+                        ) : viewingReport.rawFaults && viewingReport.rawFaults.length > 0 ? (
+                           <div className="space-y-2">
+                              {viewingReport.rawFaults.map((fault, idx) => (
+                                 <div key={idx} className="p-4 rounded-2xl border bg-slate-50 border-slate-200">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase">{fault.area}</p>
+                                    <p className="text-xs font-bold text-slate-900">{fault.description}</p>
+                                    {fault.note && <p className="text-[10px] text-slate-600 mt-1">Note: {fault.note}</p>}
+                                 </div>
+                              ))}
+                           </div>
+                        ) : (
+                           <div className="p-4 rounded-2xl border bg-slate-50 border-slate-200 text-sm text-slate-500 font-bold uppercase">No tasks logged</div>
+                        )}
+                     </div>
+
+                     <div className="flex gap-3">
+                        <button onClick={() => setViewingReport(null)} className="flex-1 px-6 py-3 rounded-xl bg-slate-100 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:bg-slate-200">Close</button>
+                        <button onClick={() => handlePrint(viewingReport)} className="flex-1 px-6 py-3 rounded-xl bg-slate-900 text-white font-black uppercase text-[10px] tracking-widest hover:bg-blue-600 flex items-center justify-center gap-2"><FaPrint size={12} /> Print</button>
+                     </div>
                   </div>
                </div>
             </div>
@@ -407,107 +499,100 @@ const MaintenancePage = () => {
                     <p className="text-xs font-bold uppercase text-slate-500">Maintenance Report</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] font-black uppercase text-slate-500">Ticket Number</p>
-                    <p className="text-2xl font-black">{printTicket.displayId}</p>
-                  </div>
-               </div>
-
-               <div className="grid grid-cols-12 gap-6 mt-6 relative z-10">
-                  <div className="col-span-4">
-                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Property</p>
-                    <h2 className="text-3xl font-black uppercase">{printTicket.unit}</h2>
-                  </div>
-                  <div className="col-span-4 text-center">
-                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Contractor Assigned</p>
-                    <p className="text-2xl font-black uppercase">{printTicket.contractor || 'Unassigned'}</p>
-                  </div>
-                  <div className="col-span-4 text-right">
-                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Date</p>
-                    <p className="text-3xl font-black">
+                    <p className="text-[10px] font-black uppercase text-slate-500">Date</p>
+                    <p className="text-4xl font-black">
                       {printTicket.issueDate ? new Date(printTicket.issueDate).toLocaleDateString() : new Date().toLocaleDateString()}
                     </p>
                   </div>
                </div>
 
-               <div className="grid grid-cols-12 gap-6 mt-6 flex-1 relative z-10">
-                  <div className="col-span-7">
-                    <h3 className="text-sm font-black uppercase tracking-widest">Maintenance Issues</h3>
-                    
-                    <div className="border-2 border-slate-900 rounded-xl p-4 mt-3">
-                      <p className="text-[10px] font-black uppercase text-slate-500">Job Complete Date</p>
-                      <div className="mt-2 h-10 border-2 border-slate-900 rounded-lg"></div>
+               <div className="grid grid-cols-12 gap-6 mt-6 relative z-10">
+                  <div className="col-span-3">
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Owner Approved Date</p>
+                    <div className="border-2 border-slate-900 rounded-lg h-10 mt-1"></div>
+                  </div>
+                  <div className="col-span-3">
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Property</p>
+                    <h2 className="text-2xl font-black uppercase">{printTicket.unit}</h2>
+                  </div>
+                  <div className="col-span-3 text-center">
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Contractor Assigned</p>
+                    <p className="text-xl font-black uppercase">{printTicket.contractor || 'Unassigned'}</p>
+                  </div>
+                  <div className="col-span-3 text-right space-y-2">
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Ticket Number</p>
+                      <p className="text-xl font-black">{printTicket.displayId}</p>
                     </div>
-                    
-                    <div className="space-y-3 mt-3">
-                      {printIssues.map(issue => (
-                        <div key={issue.id} className="border border-slate-900/20 rounded-xl p-4 flex items-start justify-between gap-4">
-                          <div className="w-5 h-5 border-2 border-slate-900 rounded flex-shrink-0 mt-1"></div>
-                          <div className="flex-1">
-                            <p className="text-[10px] font-black uppercase text-slate-400">{issue.area}</p>
-                            <p className="text-sm font-black uppercase">{issue.desc}</p>
-                          </div>
-                          <div className="text-right">
-                            {issue.liability ? (
-                              <>
-                                <p className="text-[10px] font-black uppercase text-slate-400">Bill To</p>
-                                <p className="text-xs font-black uppercase mt-1">{issue.liability}</p>
-                              </>
-                            ) : (
-                              <>
-                                <p className="text-[10px] font-black uppercase text-slate-400">Bill To</p>
-                                <div className="flex items-center gap-2 mt-2 justify-end">
-                                  <div className="w-4 h-4 border border-slate-900"></div>
-                                  <span className="text-[10px] font-black uppercase">Owner</span>
-                                  <div className="w-4 h-4 border border-slate-900"></div>
-                                  <span className="text-[10px] font-black uppercase">Tenant</span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                      {printIssues.length === 0 && (
-                        <div className="border border-slate-200 rounded-xl p-4 text-sm text-slate-400 uppercase font-bold">
-                          No issues listed.
-                        </div>
-                      )}
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">LMS Ticket</p>
+                      <div className="border-2 border-slate-900 rounded-lg h-6"></div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Invoice</p>
+                      <div className="border-2 border-slate-900 rounded-lg h-6"></div>
                     </div>
                   </div>
+               </div>
 
-                  <div className="col-span-5 space-y-4">
-                    <div className="border-2 border-slate-900 rounded-xl p-4 h-60 relative">
-                      <p className="text-[10px] font-black uppercase text-slate-500 absolute -top-2 left-4 bg-white px-2">Receipt Block</p>
-                      <div className="h-full flex items-center justify-center text-[10px] uppercase font-bold text-slate-300 text-center">
-                        Attach receipts here
+               <div className="mt-6 flex-1 relative z-10 flex flex-col gap-6">
+                  <h3 className="text-sm font-black uppercase tracking-widest">Maintenance Issues</h3>
+                  
+                  <div className="space-y-3">
+                    {printIssues.map(issue => (
+                      <div key={issue.id} className="border border-slate-900/20 rounded-xl p-4 flex items-start justify-between gap-4">
+                        <div className="w-5 h-5 border-2 border-slate-900 rounded flex-shrink-0 mt-1"></div>
+                        <div className="flex-1">
+                          <p className="text-[10px] font-black uppercase text-slate-400">{issue.area}</p>
+                          <p className="text-sm font-black uppercase">{issue.desc}</p>
+                        </div>
+                        <div className="text-right">
+                          {issue.liability ? (
+                            <>
+                              <p className="text-[10px] font-black uppercase text-slate-400">Bill To</p>
+                              <p className="text-xs font-black uppercase mt-1">{issue.liability}</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-[10px] font-black uppercase text-slate-400">Bill To</p>
+                              <div className="flex items-center gap-2 mt-2 justify-end">
+                                <div className="w-4 h-4 border border-slate-900"></div>
+                                <span className="text-[10px] font-black uppercase">Owner</span>
+                                <div className="w-4 h-4 border border-slate-900"></div>
+                                <span className="text-[10px] font-black uppercase">Tenant</span>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-
-                    <div className="border-2 border-slate-900 rounded-xl p-4">
-                      <p className="text-[10px] font-black uppercase text-slate-500">LMS Ticket Number</p>
-                      <div className="mt-2 h-10 border-2 border-slate-900 rounded-lg"></div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="border-2 border-slate-900 rounded-xl p-4">
-                        <p className="text-[10px] font-black uppercase text-slate-500">Receipt Date</p>
-                        <div className="mt-2 h-10 border-2 border-slate-900 rounded-lg"></div>
+                    ))}
+                    {printIssues.length === 0 && (
+                      <div className="border border-slate-200 rounded-xl p-4 text-sm text-slate-400 uppercase font-bold">
+                        No issues listed.
                       </div>
-                      <div className="border-2 border-slate-900 rounded-xl p-4">
-                        <p className="text-[10px] font-black uppercase text-slate-500">Amount Spent</p>
-                        <div className="mt-2 h-10 border-2 border-slate-900 rounded-lg"></div>
-                      </div>
-                    </div>
+                    )}
+                  </div>
 
-                    <div className="border-2 border-slate-900 rounded-xl p-4">
-                      <p className="text-[10px] font-black uppercase text-slate-500">Invoice Number</p>
-                      <div className="mt-2 h-10 border-2 border-slate-900 rounded-lg"></div>
-                    </div>
-
-                    <div className="border-2 border-slate-900 rounded-xl p-4">
-                      <p className="text-[10px] font-black uppercase text-slate-500">Owner Approved Date</p>
-                      <p className="text-lg font-black mt-1">{printTicket.completedAt || '________________'}</p>
-                      <p className="text-[9px] uppercase text-slate-400 font-bold">Date of job completed</p>
-                    </div>
+                  <div className="border-2 border-slate-900 p-0 relative w-full">
+                    <p className="text-[10px] font-black uppercase text-slate-500 absolute -top-2 left-4 bg-white px-2">Receipt Details</p>
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr className="border-b-2 border-slate-900">
+                          <th className="p-2 text-left border-r border-slate-900"><p className="text-[8px] font-black uppercase text-slate-600">Store</p></th>
+                          <th className="p-2 text-left border-r border-slate-900"><p className="text-[8px] font-black uppercase text-slate-600">Items</p></th>
+                          <th className="p-2 text-left"><p className="text-[8px] font-black uppercase text-slate-600">Price</p></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[1, 2, 3, 4, 5].map(num => (
+                          <tr key={num} className="border-b border-slate-900 h-8">
+                            <td className="p-2 border-r border-slate-900"></td>
+                            <td className="p-2 border-r border-slate-900"></td>
+                            <td className="p-2"></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                </div>
 

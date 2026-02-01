@@ -2,19 +2,25 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import { 
-  FaKey, FaClipboardCheck, FaTools, FaSoap, FaUserShield, 
-  FaExclamationTriangle, FaCheckCircle, FaClock,
-  FaFileInvoiceDollar, FaSearch, FaChevronRight, FaCamera, FaTimes, FaPaperPlane,
-  FaHistory, FaArchive, FaEye, FaBars
+    FaKey, FaClipboardCheck, FaTools, FaSoap, FaUserShield, 
+    FaExclamationTriangle, FaCheckCircle, FaClock,
+    FaSearch, FaCamera, FaTimes, FaBars,
+    FaEye
 } from "react-icons/fa";
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { db } from '../Config/firebaseConfig';
 
 const ClearancePage = () => {
   const [isOpen, setIsOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('active'); 
-  
-  // MODAL STATES
-  const [activeAudit, setActiveAudit] = useState(null);
-  const [isFinanceModalOpen, setIsFinanceModalOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+
+    // DATA STATE
+    const [reports, setReports] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // MODAL STATES
+    const [activeReport, setActiveReport] = useState(null);
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Responsive Sidebar Logic
   useEffect(() => {
@@ -27,66 +33,190 @@ const ClearancePage = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // 1. ACTIVE AUDITS
-  const [audits, setAudits] = useState([
-    {
-      id: 1, unit: "DUNCAN COURT A612", tenant: "Sipho Khumalo", exitDate: "2026-01-10", status: "Action Required",
-      checks: {
-        keys: { status: 'complete', note: '3/3 Sets Returned', cost: 0 },
-        inspection: { status: 'complete', note: 'Exit Inspection Done', cost: 0 },
-        maintenance: { status: 'issue', note: 'Broken Window Latch', cost: 450 },
-        cleaning: { status: 'issue', note: 'Deep Clean & Carpet Wash', cost: 850 }
-      }
-    },
-    {
-      id: 3, unit: "HILLCREST B201", tenant: "Mark Zulu", exitDate: "2026-01-15", status: "Pending",
-      checks: {
-        keys: { status: 'pending', note: 'Waiting for handover', cost: 0 },
-        inspection: { status: 'complete', note: 'Inspection Done', cost: 0 },
-        maintenance: { status: 'complete', note: 'Paint Touch-ups Done', cost: 0 },
-        cleaning: { status: 'pending', note: 'Scheduled for tomorrow', cost: 0 }
-      }
-    }
-  ]);
+    const normalizeUnit = (unit) => (unit || '').toUpperCase().trim();
 
-  // 2. HISTORY
-  const [history, setHistory] = useState([
-    {
-      id: 99, unit: "THE WALL 407", tenant: "Jessica Smith", exitDate: "2026-01-05", status: "Closed",
-      finalAction: "Full Refund", dateSent: "06 Jan 2026",
-      checks: {
-        keys: { status: 'complete', note: 'Returned', cost: 0 },
-        inspection: { status: 'complete', note: 'Clean', cost: 0 },
-        maintenance: { status: 'complete', note: 'None', cost: 0 },
-        cleaning: { status: 'complete', note: 'Clean', cost: 0 }
-      }
-    }
-  ]);
-
-  // OPEN FINANCE MEMO
-  const openFinanceModal = (audit) => {
-    setActiveAudit(audit);
-    setIsFinanceModalOpen(true);
-  };
-
-  // SEND & MOVE TO HISTORY
-  const sendToFinance = () => {
-    const totalDeductions = Object.values(activeAudit.checks).reduce((acc, curr) => acc + curr.cost, 0);
-    const action = totalDeductions > 0 ? `Deduct R${totalDeductions}` : "Full Refund";
-
-    const completedAudit = {
-        ...activeAudit,
-        status: "Closed",
-        finalAction: action,
-        dateSent: new Date().toLocaleDateString('en-GB')
+    const toDateValue = (value) => {
+        if (!value) return null;
+        if (typeof value?.toDate === 'function') return value.toDate();
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? null : d;
     };
 
-    setHistory([completedAudit, ...history]); 
-    setAudits(prev => prev.filter(a => a.id !== activeAudit.id)); 
-    
-    setIsFinanceModalOpen(false);
-    setActiveAudit(null);
-  };
+    const getLatestByDate = (items = []) => {
+        if (!items.length) return null;
+        return [...items].sort((a, b) => {
+            const aDate = toDateValue(a.completedAt || a.updatedAt || a.createdAt || a.date || a.bookedOn || a.serviceDate);
+            const bDate = toDateValue(b.completedAt || b.updatedAt || b.createdAt || b.date || b.bookedOn || b.serviceDate);
+            if (!aDate && !bDate) return 0;
+            if (!aDate) return 1;
+            if (!bDate) return -1;
+            return bDate.getTime() - aDate.getTime();
+        })[0];
+    };
+
+    const extractInspectionIssues = (inspection) => {
+        const entries = Object.entries(inspection?.results || {});
+        return entries
+            .filter(([, data]) => Array.isArray(data.tags) && data.tags.some(tag => ['Maintenance Req', 'Replace', 'Cleaning Req'].includes(tag)))
+            .map(([key, data]) => {
+                const parts = key.split('-');
+                const room = parts[0] || 'General';
+                const item = parts.slice(1).join('-') || key;
+                return {
+                    room,
+                    item,
+                    tags: data.tags || [],
+                    note: data.note || ''
+                };
+            });
+    };
+
+    const buildKeysCheck = (inspection) => {
+        if (!inspection?.keys) {
+            return { status: 'pending', note: 'No key handover recorded', cost: 0 };
+        }
+        const setsExpected = Number(inspection.keys.setsExpected || 0);
+        const setsReceived = Number(inspection.keys.setsReceived || 0);
+        const remotes = inspection.keys.remotes || 'N/A';
+        const tags = inspection.keys.tags || 'N/A';
+
+        const status = setsExpected > 0 && setsReceived < setsExpected ? 'issue' : 'complete';
+        const note = setsExpected > 0
+            ? `Sets ${setsReceived}/${setsExpected} returned · Remotes: ${remotes} · Tags: ${tags}`
+            : `Remotes: ${remotes} · Tags: ${tags}`;
+
+        return { status, note, cost: 0 };
+    };
+
+    const buildInspectionCheck = (inspection) => {
+        if (!inspection) {
+            return { status: 'pending', note: 'No inspection record', cost: 0 };
+        }
+        const issues = extractInspectionIssues(inspection);
+        const status = issues.length > 0 ? 'issue' : 'complete';
+        const note = issues.length > 0 ? `${issues.length} fault${issues.length === 1 ? '' : 's'} flagged` : 'No faults noted';
+        return { status, note, cost: 0 };
+    };
+
+    const buildMaintenanceCheck = (tickets) => {
+        if (!tickets || tickets.length === 0) {
+            return { status: 'complete', note: 'No maintenance logged', cost: 0 };
+        }
+        const openTickets = tickets.filter(t => !['closed', 'completed', 'done'].includes(String(t.status || '').toLowerCase()));
+        const status = openTickets.length > 0 ? 'issue' : 'complete';
+        const note = openTickets.length > 0
+            ? `${openTickets.length} open job${openTickets.length === 1 ? '' : 's'}`
+            : `${tickets.length} job${tickets.length === 1 ? '' : 's'} closed`;
+        return { status, note, cost: 0 };
+    };
+
+    const buildCleaningCheck = (jobs) => {
+        if (!jobs || jobs.length === 0) {
+            return { status: 'pending', note: 'No cleaning logged', cost: 0 };
+        }
+        const pending = jobs.filter(j => String(j.status || '').toLowerCase() !== 'completed');
+        const status = pending.length > 0 ? 'pending' : 'complete';
+        const note = pending.length > 0
+            ? `${pending.length} pending job${pending.length === 1 ? '' : 's'}`
+            : `${jobs.length} completed`;
+        return { status, note, cost: 0 };
+    };
+
+    const buildStatus = (checks) => {
+        if (Object.values(checks).some(check => check.status === 'issue')) return 'Action Required';
+        if (Object.values(checks).some(check => check.status === 'pending')) return 'Pending';
+        return 'Ready';
+    };
+
+    const openReportModal = (report) => {
+        setActiveReport(report);
+        setIsReportModalOpen(true);
+    };
+
+    useEffect(() => {
+        const fetchClearanceData = async () => {
+            try {
+                setLoading(true);
+                const [clearanceSnap, inspectionsSnap, maintenanceSnap, cleaningsSnap, invoicesSnap] = await Promise.all([
+                    getDocs(query(collection(db, 'clearanceReports'), orderBy('createdAt', 'desc'))),
+                    getDocs(collection(db, 'inspections')),
+                    getDocs(collection(db, 'maintenance')),
+                    getDocs(collection(db, 'cleanings')),
+                    getDocs(collection(db, 'invoices'))
+                ]);
+
+                const clearanceBase = clearanceSnap.docs.map(docItem => ({ reportId: docItem.id, ...docItem.data() }));
+                const inspections = inspectionsSnap.docs.map(docItem => ({ id: docItem.id, ...docItem.data() }));
+                const maintenance = maintenanceSnap.docs.map(docItem => ({ id: docItem.id, ...docItem.data() }));
+                const cleanings = cleaningsSnap.docs.map(docItem => ({ id: docItem.id, ...docItem.data() }));
+                const invoices = invoicesSnap.docs.map(docItem => ({ id: docItem.id, ...docItem.data() }));
+
+                const groupByUnit = (items, unitKey = 'unit') => items.reduce((acc, item) => {
+                    const unitVal = normalizeUnit(item[unitKey] || item.unit || item.inspectionUnit);
+                    if (!unitVal) return acc;
+                    if (!acc[unitVal]) acc[unitVal] = [];
+                    acc[unitVal].push(item);
+                    return acc;
+                }, {});
+
+                const inspectionsByUnit = groupByUnit(inspections);
+                const maintenanceByUnit = groupByUnit(maintenance);
+                const cleaningsByUnit = groupByUnit(cleanings);
+                const invoicesByUnit = groupByUnit(invoices);
+
+                const derivedBase = clearanceBase.length > 0
+                    ? clearanceBase
+                    : Array.from(new Set([
+                            ...Object.keys(inspectionsByUnit),
+                            ...Object.keys(maintenanceByUnit),
+                            ...Object.keys(cleaningsByUnit),
+                            ...Object.keys(invoicesByUnit)
+                        ])).map(unit => ({ unit }));
+
+                const mappedReports = derivedBase.map(base => {
+                    const unit = normalizeUnit(base.unit);
+                    const inspectionsForUnit = inspectionsByUnit[unit] || [];
+                    const maintenanceForUnit = maintenanceByUnit[unit] || [];
+                    const cleaningsForUnit = cleaningsByUnit[unit] || [];
+                    const invoicesForUnit = invoicesByUnit[unit] || [];
+
+                    const latestInspection = getLatestByDate(inspectionsForUnit);
+                    const keysCheck = buildKeysCheck(latestInspection);
+                    const inspectionCheck = buildInspectionCheck(latestInspection);
+                    const maintenanceCheck = buildMaintenanceCheck(maintenanceForUnit);
+                    const cleaningCheck = buildCleaningCheck(cleaningsForUnit);
+
+                    const totalInvoiced = invoicesForUnit.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
+                    const checks = { keys: keysCheck, inspection: inspectionCheck, maintenance: maintenanceCheck, cleaning: cleaningCheck };
+                    const status = buildStatus(checks);
+                    const issues = extractInspectionIssues(latestInspection);
+
+                    return {
+                        reportId: base.reportId || null,
+                        unit,
+                        tenant: base.tenant || base.tenantName || 'Unknown Tenant',
+                        exitDate: base.exitDate || base.exit || base.moveOutDate || 'N/A',
+                        status,
+                        checks,
+                        totalInvoiced,
+                        invoices: invoicesForUnit,
+                        maintenance: maintenanceForUnit,
+                        cleanings: cleaningsForUnit,
+                        inspection: latestInspection,
+                        inspectionIssues: issues
+                    };
+                });
+
+                setReports(mappedReports);
+            } catch (error) {
+                console.error("Error loading clearance tracker:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchClearanceData();
+    }, []);
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-900 font-sans relative">
@@ -94,151 +224,194 @@ const ClearancePage = () => {
 
       <main className={`transition-all duration-300 ${isOpen ? "md:ml-64" : "md:ml-20"} ml-0 p-4 md:p-8`}>
         
-        {/* HEADER */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 max-w-6xl mx-auto">
-          <div className="flex flex-col gap-4 w-full md:w-auto">
-             <div className="flex items-center gap-4">
-                <button onClick={() => setIsOpen(!isOpen)} className="md:hidden bg-white p-3 rounded-xl shadow-sm text-slate-600 border border-slate-200">
-                    <FaBars size={20} />
-                </button>
-                <div>
-                    <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Clearance Hub</h1>
-                </div>
-             </div>
-             
-             {/* Scrollable Tabs */}
-             <div className="w-full overflow-x-auto pb-1">
-                <div className="flex bg-slate-200 p-1 rounded-xl w-fit shadow-inner scale-95 origin-left whitespace-nowrap">
-                   <button onClick={() => setActiveTab('active')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === 'active' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Active Audits</button>
-                   <button onClick={() => setActiveTab('history')} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${activeTab === 'history' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}>Archive / History</button>
-                </div>
-             </div>
-          </div>
-          
-          {activeTab === 'active' && (
-            <div className="relative group w-full md:w-64 self-end md:self-auto">
-                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500" size={12} />
-                <input type="text" placeholder="Search Tenant..." className="w-full bg-white border border-slate-200 pl-10 pr-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest outline-none focus:ring-2 ring-blue-500 shadow-sm" />
-            </div>
-          )}
-        </header>
-
-        {/* --- VIEW: ACTIVE AUDITS --- */}
-        {activeTab === 'active' && (
-            <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
-            {audits.length === 0 ? (
-                <div className="text-center py-20 text-slate-400 italic font-bold">No active clearances.</div>
-            ) : (
-                audits.map(audit => (
-                    <ClearanceCard key={audit.id} data={audit} onOpenModal={() => openFinanceModal(audit)} />
-                ))
-            )}
-            </div>
-        )}
-
-        {/* --- VIEW: HISTORY --- */}
-        {activeTab === 'history' && (
-            <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                {history.map(item => (
-                    <div key={item.id} className="bg-slate-50 border border-slate-200 rounded-[2rem] p-6 opacity-90 hover:opacity-100 transition-all hover:shadow-md">
-                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                            <div className="flex items-center gap-4 w-full md:w-auto">
-                                <div className="p-3 bg-white rounded-xl text-slate-300 shadow-sm"><FaArchive /></div>
-                                <div>
-                                    <h3 className="text-xl font-black text-slate-700 uppercase italic">{item.unit}</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.tenant} · Sent {item.dateSent}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-                                <div className="text-right">
-                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Final Instruction</p>
-                                    <span className={`text-sm font-black px-3 py-1 rounded-lg uppercase ${item.finalAction === 'Full Refund' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                        {item.finalAction}
-                                    </span>
-                                </div>
-                                <button onClick={() => openFinanceModal(item)} className="bg-white border border-slate-200 text-slate-500 p-3 rounded-xl hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
-                                    <FaEye />
+                {/* HEADER */}
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 max-w-6xl mx-auto">
+                    <div className="flex flex-col gap-4 w-full md:w-auto">
+                         <div className="flex items-center gap-4">
+                                <button onClick={() => setIsOpen(!isOpen)} className="md:hidden bg-white p-3 rounded-xl shadow-sm text-slate-600 border border-slate-200">
+                                        <FaBars size={20} />
                                 </button>
-                            </div>
-                        </div>
+                                <div>
+                                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Clearance Tracker</h1>
+                                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Read-only clearance summary · Maintenance, inspection, keys, cleaning, invoicing</p>
+                                </div>
+                         </div>
                     </div>
-                ))}
-            </div>
-        )}
+
+                    <div className="relative group w-full md:w-64 self-end md:self-auto">
+                            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500" size={12} />
+                            <input
+                                type="text"
+                                placeholder="Search unit or tenant..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full bg-white border border-slate-200 pl-10 pr-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest outline-none focus:ring-2 ring-blue-500 shadow-sm"
+                            />
+                    </div>
+                </header>
+
+                {/* --- VIEW: CLEARANCE TRACKER --- */}
+                <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                    {loading ? (
+                        <div className="text-center py-20 text-slate-400 italic font-bold">Loading clearance data...</div>
+                    ) : reports.length === 0 ? (
+                        <div className="text-center py-20 text-slate-400 italic font-bold">No clearance reports found.</div>
+                    ) : (
+                        reports
+                            .filter(report => {
+                                const query = searchQuery.trim().toLowerCase();
+                                if (!query) return true;
+                                return report.unit?.toLowerCase().includes(query) || report.tenant?.toLowerCase().includes(query);
+                            })
+                            .map(report => (
+                                <ClearanceCard
+                                    key={report.reportId || report.unit}
+                                    data={report}
+                                    onOpenModal={() => openReportModal(report)}
+                                />
+                            ))
+                    )}
+                </div>
 
       </main>
 
-      {/* --- THE FINANCE MEMO MODAL --- */}
-      {isFinanceModalOpen && activeAudit && (
+      {/* --- CLEARANCE REPORT MODAL --- */}
+      {isReportModalOpen && activeReport && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in">
-            <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
-                
+            <div className="bg-white w-full max-w-3xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[90vh] overflow-y-auto">
+
                 {/* HEADER */}
                 <div className="p-6 md:p-8 bg-slate-900 text-white flex justify-between items-center sticky top-0 z-10">
                     <div>
-                        <h2 className="text-xl font-black uppercase italic tracking-tighter">Finance Instruction</h2>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                            {activeAudit.status === 'Closed' ? 'Archived Record' : 'Official Deduction Memo'}
-                        </p>
+                        <h2 className="text-xl font-black uppercase italic tracking-tighter">Clearance Report</h2>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{activeReport.unit} · {activeReport.tenant}</p>
                     </div>
-                    <button onClick={() => setIsFinanceModalOpen(false)} className="text-slate-500 hover:text-white"><FaTimes size={20}/></button>
+                    <button onClick={() => setIsReportModalOpen(false)} className="text-slate-500 hover:text-white"><FaTimes size={20}/></button>
                 </div>
-                
+
                 {/* BODY */}
-                <div className="p-6 md:p-8">
-                    <div className="flex justify-between items-end border-b border-slate-100 pb-4 mb-4">
-                        <div>
+                <div className="p-6 md:p-8 space-y-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tenant</p>
-                            <h3 className="text-lg font-black text-slate-900">{activeAudit.tenant}</h3>
+                            <p className="text-sm font-black text-slate-900">{activeReport.tenant}</p>
                         </div>
-                        <div className="text-right">
-                             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Unit</p>
-                             <h3 className="text-lg font-black text-blue-600">{activeAudit.unit}</h3>
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Unit</p>
+                            <p className="text-sm font-black text-blue-600">{activeReport.unit}</p>
+                        </div>
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Exit Date</p>
+                            <p className="text-sm font-black text-slate-900">{activeReport.exitDate}</p>
                         </div>
                     </div>
 
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Deduction Breakdown</p>
-                    <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
-                        {Object.values(activeAudit.checks).filter(c => c.cost > 0).length === 0 ? (
-                            <div className="flex items-center gap-3 text-green-600">
-                                <FaCheckCircle />
-                                <span className="text-xs font-bold uppercase">No Deductions - Full Refund</span>
+                    <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Checklist</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <AuditStep icon={<FaKey />} title="Keys" data={activeReport.checks.keys} />
+                            <AuditStep icon={<FaClipboardCheck />} title="Inspection" data={activeReport.checks.inspection} />
+                            <AuditStep icon={<FaTools />} title="Maintenance" data={activeReport.checks.maintenance} />
+                            <AuditStep icon={<FaSoap />} title="Cleaning" data={activeReport.checks.cleaning} />
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Invoiced</p>
+                                <p className="text-xs text-slate-500 font-bold">Based on invoices linked to this unit</p>
                             </div>
+                            <p className="text-2xl font-black text-slate-900">R{activeReport.totalInvoiced.toFixed(0)}</p>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Deduct from Deposit</span>
+                            <span className="text-2xl font-black text-red-600">R{activeReport.totalInvoiced.toFixed(0)}</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Inspection Faults Noted</p>
+                        {activeReport.inspectionIssues.length === 0 ? (
+                            <div className="bg-green-50 text-green-700 rounded-2xl p-4 border border-green-100 text-xs font-bold">No inspection faults recorded.</div>
                         ) : (
-                            Object.entries(activeAudit.checks).map(([key, check]) => {
-                                if(check.cost <= 0) return null;
-                                return (
-                                    <div key={key} className="flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-[10px] font-black uppercase text-slate-500">{key}</span>
-                                            <span className="text-[9px] font-bold text-slate-400 italic">({check.note})</span>
+                            <div className="space-y-3">
+                                {activeReport.inspectionIssues.map((issue, idx) => (
+                                    <div key={`${issue.room}-${issue.item}-${idx}`} className="bg-white border border-slate-100 rounded-2xl p-4">
+                                        <p className="text-xs font-black text-slate-800">{issue.room} · {issue.item}</p>
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {issue.tags.map(tag => (
+                                                <span key={tag} className="text-[8px] font-black uppercase bg-orange-100 text-orange-700 px-2 py-1 rounded-lg">{tag}</span>
+                                            ))}
                                         </div>
-                                        <span className="text-sm font-black text-red-500">R{check.cost.toLocaleString()}</span>
+                                        {issue.note && <p className="text-[10px] text-slate-500 mt-2">{issue.note}</p>}
                                     </div>
-                                )
-                            })
+                                ))}
+                            </div>
                         )}
                     </div>
 
-                    <div className="mt-6 flex justify-between items-end">
-                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Total to Deduct</span>
-                        <span className="text-3xl font-black text-slate-900 tracking-tighter">
-                            R{Object.values(activeAudit.checks).reduce((acc, curr) => acc + curr.cost, 0).toLocaleString()}
-                        </span>
+                    <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Maintenance Jobs</p>
+                        {activeReport.maintenance.length === 0 ? (
+                            <div className="bg-slate-50 text-slate-500 rounded-2xl p-4 border border-slate-100 text-xs font-bold">No maintenance jobs linked.</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {activeReport.maintenance.map(job => (
+                                    <div key={job.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex justify-between items-start">
+                                        <div>
+                                            <p className="text-xs font-black text-slate-800">{job.issue || 'Maintenance job'}</p>
+                                            <p className="text-[10px] text-slate-500">Status: {job.status || 'Unknown'}</p>
+                                        </div>
+                                        <span className="text-[9px] font-black uppercase text-slate-400">{job.displayId || 'JOB'}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Cleaning Jobs</p>
+                        {activeReport.cleanings.length === 0 ? (
+                            <div className="bg-slate-50 text-slate-500 rounded-2xl p-4 border border-slate-100 text-xs font-bold">No cleaning jobs linked.</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {activeReport.cleanings.map(job => (
+                                    <div key={job.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex justify-between items-start">
+                                        <div>
+                                            <p className="text-xs font-black text-slate-800">{job.cleaner || 'Cleaner'} · {job.status || 'Unknown'}</p>
+                                            <p className="text-[10px] text-slate-500">Booked: {job.bookedOn || job.serviceDate || 'N/A'}</p>
+                                        </div>
+                                        <span className="text-[9px] font-black uppercase text-slate-400">{job.unit}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Invoices</p>
+                        {activeReport.invoices.length === 0 ? (
+                            <div className="bg-slate-50 text-slate-500 rounded-2xl p-4 border border-slate-100 text-xs font-bold">No invoices found.</div>
+                        ) : (
+                            <div className="space-y-3">
+                                {activeReport.invoices.map(inv => (
+                                    <div key={inv.id} className="bg-white border border-slate-100 rounded-2xl p-4 flex justify-between items-start">
+                                        <div>
+                                            <p className="text-xs font-black text-slate-800">{inv.status || 'Draft'} · {inv.date || 'No date'}</p>
+                                            <p className="text-[10px] text-slate-500">Items: {(inv.items || []).length}</p>
+                                        </div>
+                                        <span className="text-sm font-black text-slate-900">R{Number(inv.total || 0).toFixed(0)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 {/* FOOTER */}
-                <div className="p-6 bg-slate-50 border-t border-slate-100">
-                    {activeAudit.status === 'Closed' ? (
-                        <div className="w-full py-4 bg-slate-200 text-slate-500 rounded-xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 cursor-default">
-                            <FaCheckCircle /> <span>Record Archived</span>
-                        </div>
-                    ) : (
-                        <button onClick={sendToFinance} className="w-full py-4 bg-blue-600 text-white rounded-xl font-black uppercase text-xs tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-lg active:scale-95">
-                            <FaPaperPlane /> <span>Send Memo & Archive</span>
-                        </button>
-                    )}
+                <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+                    <button onClick={() => setIsReportModalOpen(false)} className="px-6 py-3 rounded-xl bg-white border border-slate-200 text-slate-500 font-black uppercase text-[10px] tracking-widest">Close</button>
                 </div>
             </div>
         </div>
@@ -250,12 +423,11 @@ const ClearancePage = () => {
 
 /* --- SUB-COMPONENTS --- */
 const ClearanceCard = ({ data, onOpenModal }) => {
-  const { unit, tenant, exitDate, checks, status } = data;
-  const totalDeductions = Object.values(checks).reduce((acc, curr) => acc + curr.cost, 0);
-  const isReady = status === 'Ready';
-  const isPending = status === 'Pending';
-  const statusColor = isReady ? 'bg-green-100 text-green-700' : isPending ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700';
-  const statusIcon = isReady ? <FaCheckCircle /> : isPending ? <FaClock /> : <FaExclamationTriangle />;
+    const { unit, tenant, exitDate, checks, status, totalInvoiced } = data;
+    const isReady = status === 'Ready';
+    const isPending = status === 'Pending';
+    const statusColor = isReady ? 'bg-green-100 text-green-700' : isPending ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700';
+    const statusIcon = isReady ? <FaCheckCircle /> : isPending ? <FaClock /> : <FaExclamationTriangle />;
 
   return (
     <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden hover:shadow-lg transition-all animate-in fade-in slide-in-from-bottom-4">
@@ -288,23 +460,19 @@ const ClearanceCard = ({ data, onOpenModal }) => {
         <div className="px-6 md:px-8 py-6 bg-white border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-4 w-full md:w-auto justify-center md:justify-start">
                  <div className="text-center md:text-left">
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Final Instruction</p>
-                    {totalDeductions > 0 ? (
-                        <p className="text-2xl font-black text-red-500 italic">Deduct R{totalDeductions.toLocaleString()}</p>
+                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Deduct From Deposit</p>
+                    {totalInvoiced > 0 ? (
+                        <p className="text-2xl font-black text-red-500 italic">R{totalInvoiced.toLocaleString()}</p>
                     ) : (
-                        <p className="text-2xl font-black text-green-500 italic">Full Refund</p>
+                        <p className="text-2xl font-black text-green-500 italic">R0</p>
                     )}
                 </div>
             </div>
-            {isPending ? (
-                 <button disabled className="w-full md:w-auto bg-slate-100 text-slate-400 px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed">
-                    <FaClock /> <span>Complete Tasks First</span>
-                 </button>
-            ) : (
-                <button onClick={onOpenModal} className="w-full md:w-auto bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl hover:bg-blue-600 transition-all active:scale-95 group">
-                    <FaFileInvoiceDollar size={16} /> <span>Submit to Finance</span> <FaChevronRight className="group-hover:translate-x-1 transition-transform" />
+            <div className="flex items-center gap-3 w-full md:w-auto">
+                <button onClick={onOpenModal} className="w-full md:w-auto bg-slate-900 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl hover:bg-blue-600 transition-all active:scale-95">
+                    <FaEye size={14} /> <span>View Summary</span>
                 </button>
-            )}
+            </div>
         </div>
     </div>
   );

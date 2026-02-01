@@ -8,6 +8,8 @@ import {
   FaPaperPlane, FaTimes, FaEye, FaBars
 } from "react-icons/fa";
 import { BiBuildings, BiCoinStack, BiCartAdd } from "react-icons/bi";
+import { db } from '../Config/firebaseConfig';
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
 
 const InvoicingPage = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -20,18 +22,33 @@ const InvoicingPage = () => {
   const [customItem, setCustomItem] = useState({ name: '', price: '', category: 'Materials' });
 
   // --- HISTORY STATE ---
-  const [invoices, setInvoices] = useState([
-    { 
-        id: 101, unit: 'HILLCREST A612', total: 4500, date: '12 Jan 2026', status: 'Sent',
-        items: [{ name: "Wall Paint", price: 450, qty: 10 }] 
-    },
-    { 
-        id: 102, unit: 'THE WALL 407', total: 1250, date: '14 Jan 2026', status: 'Draft',
-        items: [{ name: "Plumbing Call-out", price: 550, qty: 1 }, { name: "Tap Washer", price: 50, qty: 1 }]
-    },
-  ]);
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
   
   const [viewingInvoice, setViewingInvoice] = useState(null);
+
+  // Fetch invoices from Firestore on mount
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
+
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      const q = query(collection(db, 'invoices'), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const invoicesList = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setInvoices(invoicesList);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
+      alert("Error loading invoices. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Responsive Sidebar Logic
   useEffect(() => {
@@ -55,9 +72,12 @@ const InvoicingPage = () => {
         { id: 5, name: "Plumbing Call-out", price: 550, icon: <FaHammer/> },
         { id: 6, name: "Electrician Call-out", price: 650, icon: <FaHammer/> },
     ],
-    Service: [
-        { id: 7, name: "Deep Clean (Unit)", price: 850, icon: <FaBroom/> },
-        { id: 8, name: "Refuse Removal", price: 150, icon: <FaTrash/> },
+    Cleaning: [
+        { id: 7, name: "1 Bedroom flat", price: 500, icon: <FaBroom/> },
+        { id: 8, name: "2 Bedroom flat", price: 950, icon: <FaBroom/> },
+        { id: 9, name: "Bachelor flat", price: 500, icon: <FaBroom/> },
+        { id: 10, name: "Room + bathroom", price: 500, icon: <FaBroom/> },
+        { id: 11, name: "Room", price: 400, icon: <FaBroom/> },
     ]
   };
 
@@ -89,36 +109,71 @@ const InvoicingPage = () => {
   };
 
   // --- INVOICE ACTIONS ---
-  const createDraft = () => {
+  const createDraft = async () => {
     if (!unit || cart.length === 0) return;
-    const newInvoice = {
-        id: Date.now(),
+    
+    try {
+      const newInvoice = {
         unit: unit,
         total: calculateTotal(),
         subtotal: calculateSubtotal(),
         markup: markup,
         date: new Date().toLocaleDateString('en-GB'),
         status: 'Draft', 
-        items: [...cart] 
-    };
-    setInvoices([newInvoice, ...invoices]);
-    setCart([]);
-    setUnit("");
-    setActiveTab('history');
-  };
-
-  const deleteInvoice = (id) => {
-    if(confirm("Permanently delete this invoice?")) {
-        setInvoices(invoices.filter(i => i.id !== id));
-        if(viewingInvoice?.id === id) setViewingInvoice(null);
+        items: cart,
+        createdAt: serverTimestamp()
+      };
+      
+      await addDoc(collection(db, 'invoices'), newInvoice);
+      
+      // Clear form and refresh list
+      setCart([]);
+      setUnit("");
+      setActiveTab('history');
+      
+      // Refetch to get updated list
+      await fetchInvoices();
+      
+      alert("Draft invoice created successfully!");
+    } catch (error) {
+      console.error("Error creating invoice:", error);
+      alert("Error creating invoice. Please try again.");
     }
   };
 
-  const sendInvoice = (id) => {
-    if(confirm("Ready to email this to the owner?")) {
-        setInvoices(invoices.map(i => i.id === id ? { ...i, status: 'Sent' } : i));
-        alert("Invoice sent successfully.");
-        setViewingInvoice(null);
+  const deleteInvoice = async (id) => {
+    if(!confirm("Permanently delete this invoice?")) return;
+    
+    try {
+      await deleteDoc(doc(db, 'invoices', id));
+      
+      // Update local state
+      setInvoices(invoices.filter(i => i.id !== id));
+      if(viewingInvoice?.id === id) setViewingInvoice(null);
+      
+      alert("Invoice deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting invoice:", error);
+      alert("Error deleting invoice. Please try again.");
+    }
+  };
+
+  const sendInvoice = async (id) => {
+    if(!confirm("Ready to email this to the owner?")) return;
+    
+    try {
+      await updateDoc(doc(db, 'invoices', id), {
+        status: 'Sent'
+      });
+      
+      // Update local state
+      setInvoices(invoices.map(i => i.id === id ? { ...i, status: 'Sent' } : i));
+      setViewingInvoice(null);
+      
+      alert("Invoice sent successfully!");
+    } catch (error) {
+      console.error("Error sending invoice:", error);
+      alert("Error sending invoice. Please try again.");
     }
   };
 
@@ -290,31 +345,50 @@ const InvoicingPage = () => {
 
         {/* --- VIEW 2: HISTORY --- */}
         {activeTab === 'history' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
-                {invoices.map(inv => (
-                    <div key={inv.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                        <div className="flex justify-between items-start mb-6">
-                            <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-lg"><FaFileInvoice size={20}/></div>
-                            <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${
-                                inv.status === 'Paid' ? 'bg-green-100 text-green-700' : 
-                                inv.status === 'Sent' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
-                            }`}>
-                                {inv.status}
-                            </span>
-                        </div>
-                        <h3 className="text-xl font-black uppercase italic tracking-tighter text-slate-900 mb-1">{inv.unit}</h3>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Issued: {inv.date}</p>
-                        
-                        <div className="flex justify-between items-end border-t border-slate-100 pt-4">
-                            <div className="flex gap-2">
-                                <button onClick={() => setViewingInvoice(inv)} className="bg-slate-100 text-slate-500 p-2 rounded-lg hover:bg-slate-200 transition-colors"><FaEye size={12}/></button>
-                                <button onClick={() => deleteInvoice(inv.id)} className="bg-red-50 text-red-500 p-2 rounded-lg hover:bg-red-500 hover:text-white transition-colors"><FaTrash size={12}/></button>
-                            </div>
-                            <span className="text-2xl font-black text-slate-900">R{inv.total.toFixed(0)}</span>
-                        </div>
+            <>
+            {loading ? (
+                <div className="flex items-center justify-center py-20">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Loading Invoices...</p>
                     </div>
-                ))}
-            </div>
+                </div>
+            ) : invoices.length === 0 ? (
+                <div className="flex items-center justify-center py-20">
+                    <div className="text-center">
+                        <FaFileInvoice size={60} className="text-slate-200 mx-auto mb-4"/>
+                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No invoices yet</p>
+                        <p className="text-xs text-slate-300 mt-2">Create your first invoice in the Builder tab</p>
+                    </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
+                    {invoices.map(inv => (
+                        <div key={inv.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="w-12 h-12 bg-slate-900 text-white rounded-2xl flex items-center justify-center shadow-lg"><FaFileInvoice size={20}/></div>
+                                <span className={`text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${
+                                    inv.status === 'Paid' ? 'bg-green-100 text-green-700' : 
+                                    inv.status === 'Sent' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                                }`}>
+                                    {inv.status}
+                                </span>
+                            </div>
+                            <h3 className="text-xl font-black uppercase italic tracking-tighter text-slate-900 mb-1">{inv.unit}</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Issued: {inv.date}</p>
+                            
+                            <div className="flex justify-between items-end border-t border-slate-100 pt-4">
+                                <div className="flex gap-2">
+                                    <button onClick={() => setViewingInvoice(inv)} className="bg-slate-100 text-slate-500 p-2 rounded-lg hover:bg-slate-200 transition-colors"><FaEye size={12}/></button>
+                                    <button onClick={() => deleteInvoice(inv.id)} className="bg-red-50 text-red-500 p-2 rounded-lg hover:bg-red-500 hover:text-white transition-colors"><FaTrash size={12}/></button>
+                                </div>
+                                <span className="text-2xl font-black text-slate-900">R{inv.total.toFixed(0)}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+            </>
         )}
 
       </main>

@@ -2,6 +2,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { BiBot, BiSend, BiX } from "react-icons/bi";
 import { FaRobot, FaArrowsAlt } from "react-icons/fa";
+import { db } from '../Config/firebaseConfig';
+import { collection, getDocs } from 'firebase/firestore';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const PulseyBot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -9,6 +12,7 @@ const PulseyBot = () => {
   const [messages, setMessages] = useState([
     { role: 'bot', text: "SYSTEMS ONLINE. HOW CAN I HELP?" }
   ]);
+  const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef(null);
 
   // --- DRAGGABLE STATE ---
@@ -53,25 +57,162 @@ const PulseyBot = () => {
   };
 
   // --- CHAT LOGIC ---
-  const handleSend = (e) => {
+  const fetchDatabaseContext = async () => {
+    try {
+      // Fetch data from all collections
+      const [maintenanceSnap, cleaningsSnap, inspectionsSnap, invoicesSnap] = await Promise.all([
+        getDocs(collection(db, "maintenance")),
+        getDocs(collection(db, "cleanings")),
+        getDocs(collection(db, "inspections")),
+        getDocs(collection(db, "invoices"))
+      ]);
+
+      const maintenance = maintenanceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const cleanings = cleaningsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const inspections = inspectionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const invoices = invoicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      return {
+        maintenance,
+        cleanings,
+        inspections,
+        invoices,
+        summary: {
+          totalMaintenance: maintenance.length,
+          maintenanceRequests: maintenance.filter(m => m.status === 'request').length,
+          activeJobs: maintenance.filter(m => m.status === 'active').length,
+          completedJobs: maintenance.filter(m => m.status === 'completed').length,
+          totalCleanings: cleanings.length,
+          bookedCleanings: cleanings.filter(c => c.status === 'Booked').length,
+          totalInspections: inspections.length,
+          totalInvoices: invoices.length
+        }
+      };
+    } catch (error) {
+      console.error("Error fetching database:", error);
+      return null;
+    }
+  };
+
+  const handleSend = async (e) => {
     e.preventDefault();
-    const cleanInput = input.trim().toLowerCase();
-    if (!cleanInput) return;
+    const userMessage = input.trim();
+    if (!userMessage) return;
 
-    setMessages(prev => [...prev, { role: 'user', text: input.toUpperCase() }]);
+    setMessages(prev => [...prev, { role: 'user', text: userMessage.toUpperCase() }]);
     setInput("");
+    setIsLoading(true);
 
-    setTimeout(() => {
-      const match = pulseyBrain.find(cmd => 
-        cmd.keywords.some(key => cleanInput.includes(key))
-      );
+    try {
+      // Fetch current database state
+      const dbContext = await fetchDatabaseContext();
+      
+      if (!dbContext) {
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          text: "DATABASE CONNECTION ERROR. UNABLE TO ACCESS PULSE SYSTEMS." 
+        }]);
+        setIsLoading(false);
+        return;
+      }
 
-      const botResponse = match 
-        ? match.response 
-        : "COMMAND UNRECOGNIZED. TRY 'HELP' FOR PROTOCOLS.";
+      // Try AI response first
+      try {
+        // Initialize Gemini AI
+        const API_KEY = 'AIzaSyCOg0nQIHpzv9_lHSAy64VPgMwK562BqfI';
+        
+        if (API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
+          throw new Error('No API key configured');
+        }
 
-      setMessages(prev => [...prev, { role: 'bot', text: botResponse.toUpperCase() }]);
-    }, 600);
+        const genAI = new GoogleGenerativeAI(API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+        // Build context prompt
+        const contextPrompt = `You are Pulsey-Bot, an AI assistant for OC Pulse property management system. You have access to real-time database information.
+
+CURRENT DATABASE STATE:
+- Maintenance Requests: ${dbContext.summary.maintenanceRequests} pending
+- Active Job Cards: ${dbContext.summary.activeJobs}
+- Completed Jobs: ${dbContext.summary.completedJobs}
+- Scheduled Cleanings: ${dbContext.summary.bookedCleanings}
+- Total Inspections: ${dbContext.summary.totalInspections}
+- Total Invoices: ${dbContext.summary.totalInvoices}
+
+RECENT MAINTENANCE TICKETS:
+${dbContext.maintenance.slice(0, 5).map(m => `- ${m.unit}: ${m.issue || m.status} (Status: ${m.status})`).join('\n')}
+
+RECENT CLEANINGS:
+${dbContext.cleanings.slice(0, 3).map(c => `- Unit ${c.unit}: ${c.status || 'Scheduled'}`).join('\n')}
+
+User Question: "${userMessage}"
+
+Respond in an authoritative, tech-style voice (like a military AI). Keep responses concise and data-focused. Use uppercase for emphasis. Provide specific information from the database when relevant.`;
+
+        const result = await model.generateContent(contextPrompt);
+        const response = result.response.text();
+
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          text: response.toUpperCase()
+        }]);
+
+      } catch (aiError) {
+        console.error("AI Error Details:", aiError.message);
+        
+        // FALLBACK: Use database context for intelligent keyword matching
+        const userLower = userMessage.toLowerCase();
+        let response = "";
+
+        // Greeting detection
+        if (userLower.match(/hello|hi|hey|greetings/)) {
+          response = `GREETINGS, OPERATOR. PULSE SYSTEMS ONLINE. ${dbContext.summary.maintenanceRequests} REQUESTS PENDING, ${dbContext.summary.activeJobs} JOBS ACTIVE.`;
+        }
+        // Status queries
+        else if (userLower.match(/status|overview|update|dashboard/)) {
+          response = `SYSTEM STATUS: ${dbContext.summary.maintenanceRequests} MAINTENANCE REQUESTS | ${dbContext.summary.activeJobs} ACTIVE JOBS | ${dbContext.summary.completedJobs} COMPLETED | ${dbContext.summary.bookedCleanings} CLEANINGS SCHEDULED`;
+        }
+        // Maintenance queries
+        else if (userLower.match(/maintenance|repair|fix|broken/)) {
+          const recentUnit = dbContext.maintenance[0]?.unit || 'NONE';
+          response = `MAINTENANCE LOG: ${dbContext.summary.totalMaintenance} TOTAL TICKETS. LATEST: ${recentUnit}. ${dbContext.summary.maintenanceRequests} AWAITING APPROVAL.`;
+        }
+        // Cleaning queries
+        else if (userLower.match(/clean|cleaning|maid/)) {
+          response = `CLEANING OPERATIONS: ${dbContext.summary.bookedCleanings} UNITS SCHEDULED. ${dbContext.summary.totalCleanings} TOTAL RECORDS.`;
+        }
+        // Inspection queries
+        else if (userLower.match(/inspect|inspection|check/)) {
+          response = `INSPECTION DATABASE: ${dbContext.summary.totalInspections} INSPECTIONS LOGGED. ALL REPORTS ARCHIVED.`;
+        }
+        // Invoice queries
+        else if (userLower.match(/invoice|bill|payment|finance/)) {
+          response = `FINANCIAL RECORDS: ${dbContext.summary.totalInvoices} INVOICES IN SYSTEM. ACCESS INVOICING PAGE FOR DETAILS.`;
+        }
+        // Help
+        else if (userLower.match(/help|command|what can you/)) {
+          response = `AVAILABLE QUERIES: STATUS, MAINTENANCE, CLEANINGS, INSPECTIONS, INVOICES. ASK ABOUT SPECIFIC UNITS OR COUNTS. AI MODE CURRENTLY OFFLINE.`;
+        }
+        // Default
+        else {
+          response = `PROCESSING QUERY... ${dbContext.summary.totalMaintenance} MAINTENANCE | ${dbContext.summary.totalCleanings} CLEANINGS | ${dbContext.summary.totalInspections} INSPECTIONS TRACKED. BE MORE SPECIFIC OR TRY 'HELP'.`;
+        }
+
+        setMessages(prev => [...prev, { 
+          role: 'bot', 
+          text: response
+        }]);
+      }
+
+    } catch (error) {
+      console.error("Critical Error:", error);
+      setMessages(prev => [...prev, { 
+        role: 'bot', 
+        text: "CRITICAL SYSTEM ERROR. DATABASE UNREACHABLE. CONTACT ADMIN." 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -133,6 +274,17 @@ const PulseyBot = () => {
                     </div>
                 </div>
                 ))}
+                {isLoading && (
+                  <div className="flex justify-start">
+                    <div className="bg-slate-800/80 border border-white/5 p-3 rounded-xl rounded-bl-none">
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
             </div>
 
             {/* INPUT */}
@@ -141,10 +293,17 @@ const PulseyBot = () => {
                 <input 
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    placeholder="CMD..."
-                    className="w-full bg-black/20 border border-white/10 p-3 pr-10 rounded-xl text-[10px] font-black text-blue-300 outline-none uppercase tracking-widest focus:border-blue-500/50 transition-colors placeholder:text-slate-600"
+                    disabled={isLoading}
+                    placeholder={isLoading ? "PROCESSING..." : "CMD..."}
+                    className="w-full bg-black/20 border border-white/10 p-3 pr-10 rounded-xl text-[10px] font-black text-blue-300 outline-none uppercase tracking-widest focus:border-blue-500/50 transition-colors placeholder:text-slate-600 disabled:opacity-50"
                 />
-                <button type="submit" className="absolute right-3 text-blue-500 hover:text-white transition-colors"><BiSend size={16} /></button>
+                <button 
+                  type="submit" 
+                  disabled={isLoading}
+                  className="absolute right-3 text-blue-500 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  <BiSend size={16} />
+                </button>
                 </div>
             </form>
             </div>
