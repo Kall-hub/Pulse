@@ -339,7 +339,7 @@ const InvoicingPage = () => {
                         <label className="text-[10px] font-black text-green-600 uppercase tracking-widest block mb-2">Ref Invoice</label>
                         <input 
                             placeholder="12345" 
-                            maxLength="5"
+                            maxLength="10"
                             className="w-full bg-white p-3 rounded-xl text-sm font-black uppercase outline-none focus:ring-2 ring-green-500 transition-all placeholder:text-slate-300"
                             value={referenceInvoice}
                             onChange={(e) => setReferenceInvoice(e.target.value.toUpperCase())}
