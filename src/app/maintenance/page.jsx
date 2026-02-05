@@ -36,7 +36,24 @@ const MaintenancePage = () => {
     const q = query(collection(db, "maintenance"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setTickets(data);
+      setTickets(prevTickets => {
+        // Merge fresh Firestore data with existing local state to preserve liability values
+        return data.map(newTicket => {
+          const oldTicket = prevTickets.find(t => t.id === newTicket.id);
+          if (oldTicket && oldTicket.tasks && newTicket.tasks) {
+            // Preserve liability field from old tasks
+            const updatedTasks = newTicket.tasks.map(newTask => {
+              const oldTask = oldTicket.tasks.find(t => t.id === newTask.id);
+              return {
+                ...newTask,
+                liability: oldTask?.liability ?? newTask.liability
+              };
+            });
+            return { ...newTicket, tasks: updatedTasks };
+          }
+          return newTicket;
+        });
+      });
       setLoading(false);
     }, (error) => console.error("DB Error:", error));
     return () => unsubscribe();
@@ -135,8 +152,10 @@ const MaintenancePage = () => {
   };
 
   const handlePrint = (ticket) => {
-    setPrintTicket(ticket);
-    setTimeout(() => { window.print(); }, 100);
+    // Get the latest version of the ticket from state
+    const latestTicket = tickets.find(t => t.id === ticket.id) || ticket;
+    setPrintTicket(latestTicket);
+    setTimeout(() => { window.print(); }, 200);
   };
 
   const filteredTickets = tickets.filter(t => {
@@ -153,21 +172,24 @@ const MaintenancePage = () => {
         id: task.id ?? `task-${index}`,
         desc: task.desc,
         area: task.area || 'General',
-        liability: task.liability || null
+        liability: task.liability || null,
+        done: task.done === true
       }))
     : printTicket?.rawFaults?.length
       ? printTicket.rawFaults.map((fault, index) => ({
           id: `fault-${index}`,
           desc: fault.description,
           area: fault.area || 'General',
-          liability: null
+          liability: null,
+          done: false
         }))
       : printTicket
         ? [{
             id: 'issue',
             desc: printTicket.issue,
             area: printTicket.areas?.[0] || 'General',
-            liability: null
+            liability: null,
+            done: false
           }]
         : [];
 
@@ -537,6 +559,8 @@ const MaintenancePage = () => {
            @media print {
              @page { margin: 10mm; size: A4; }
              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+             img { display: none !important; }
+             .print\\:hidden { display: none !important; }
            }
          `}</style>
          
@@ -597,11 +621,15 @@ const MaintenancePage = () => {
                   
                   <div className="space-y-3">
                     {printIssues.map(issue => (
-                      <div key={issue.id} className="border border-slate-900/20 rounded-xl p-4 flex items-start justify-between gap-4">
-                        <div className="w-5 h-5 border-2 border-slate-900 rounded flex-shrink-0 mt-1"></div>
-                        <div className="flex-1">
-                          <p className="text-[10px] font-black uppercase text-slate-400">{issue.area}</p>
-                          <p className="text-sm font-black uppercase">{issue.desc}</p>
+                      <div key={issue.id} className={`border rounded-xl p-4 flex items-start justify-between gap-4 ${issue.done ? 'border-slate-900/40 bg-slate-50' : 'border-slate-900/20'}`}>
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className={`w-5 h-5 rounded flex-shrink-0 mt-1 flex items-center justify-center ${issue.done ? 'bg-slate-900 border-2 border-slate-900' : 'border-2 border-slate-900'}`}>
+                            {issue.done && <span className="text-white text-xs font-black">✓</span>}
+                          </div>
+                          <div className="flex-1">
+                            <p className={`text-[10px] font-black uppercase ${issue.done ? 'text-slate-500' : 'text-slate-400'}`}>{issue.area}</p>
+                            <p className={`text-sm font-black uppercase ${issue.done ? 'line-through text-slate-400' : ''}`}>{issue.desc}</p>
+                          </div>
                         </div>
                         <div className="text-right">
                           {issue.liability ? (
