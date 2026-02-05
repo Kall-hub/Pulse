@@ -8,7 +8,7 @@ import {
   FaPlus, FaTools, FaClock, FaSearch, 
   FaCamera, FaCheckCircle, FaBars,
   FaFileSignature, FaExclamationCircle, 
-  FaTrash, FaPrint, FaArrowRight, FaCheck
+  FaTrash, FaPrint, FaArrowRight, FaCheck, FaTimes
 } from "react-icons/fa";
 
 import { db } from '../Config/firebaseConfig';
@@ -27,6 +27,7 @@ const MaintenancePage = () => {
   
   const [viewingReport, setViewingReport] = useState(null); 
   const [isLogModalOpen, setIsLogModalOpen] = useState(false); 
+  const [viewingImage, setViewingImage] = useState(null);
   
   const [printTicket, setPrintTicket] = useState(null);
 
@@ -275,7 +276,7 @@ const MaintenancePage = () => {
                                 <option value="Unassigned">Assign Tech</option>
                                 <option value="Rasta">Rasta</option>
                                 <option value="Johannes">Johannes</option>
-                                <option value="External">External</option>
+                                <option value="Other">Other</option>
                             </select>
                           </div>
 
@@ -309,13 +310,42 @@ const MaintenancePage = () => {
                             
                             {job.tasks && job.tasks.map(task => (
                                <div key={task.id} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${task.done ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent hover:border-blue-500'}`}>
-                                  <button onClick={() => toggleTask(job, task.id)} className="flex items-center space-x-4 flex-1 text-left">
-                                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${task.done ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-400'}`}>{task.done && <FaCheckCircle size={14} />}</div>
-                                    <div>
+                                  <div className="flex items-center space-x-4 flex-1">
+                                    <button onClick={() => toggleTask(job, task.id)} className="flex items-center space-x-4">
+                                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${task.done ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-400'}`}>{task.done && <FaCheckCircle size={14} />}</div>
+                                    </button>
+                                    <div className="flex-1">
                                        <p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">{task.area}</p>
                                        <p className={`text-xs font-bold uppercase ${task.done ? 'line-through text-slate-400' : 'text-slate-900'}`}>{task.desc}</p>
+                                       {task.completedAt && (
+                                         <p className="text-[9px] text-green-600 font-bold mt-1">{task.completedAt}</p>
+                                       )}
+                                       {task.images && task.images.length > 0 && (
+                                         <div className="flex gap-1 mt-2 print:hidden" style={{ position: 'relative', zIndex: 10 }}>
+                                           {task.images.map((url, idx) => (
+                                             <div
+                                               key={idx}
+                                               onClick={(e) => {
+                                                 e.preventDefault();
+                                                 e.stopPropagation();
+                                                 console.log('IMAGE CLICKED!', url);
+                                                 setViewingImage(url);
+                                               }}
+                                               className="w-12 h-12 rounded-lg overflow-hidden border-2 border-green-400 cursor-pointer hover:border-blue-500 transition-all active:scale-95 bg-white"
+                                               style={{ position: 'relative', zIndex: 11 }}
+                                             >
+                                               <img 
+                                                 src={url} 
+                                                 alt="" 
+                                                 className="w-full h-full object-cover" 
+                                                 style={{ pointerEvents: 'none' }}
+                                               />
+                                             </div>
+                                           ))}
+                                         </div>
+                                       )}
                                     </div>
-                                  </button>
+                                  </div>
                                   <button 
                                     onClick={() => toggleLiability(job, task.id)} 
                                     className={`ml-4 px-3 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-all ${
@@ -439,6 +469,33 @@ const MaintenancePage = () => {
                                     <div className="flex-1">
                                        <p className="text-[9px] font-black text-slate-400 uppercase">{task.area}</p>
                                        <p className={`text-xs font-bold ${task.done ? 'line-through text-slate-400' : 'text-slate-900'}`}>{task.desc}</p>
+                                       {task.completedAt && (
+                                         <p className="text-[9px] text-green-600 font-bold mt-1">{task.completedAt}</p>
+                                       )}
+                                       {task.images && task.images.length > 0 && (
+                                         <div className="flex gap-1 mt-2 print:hidden" style={{ position: 'relative', zIndex: 10 }}>
+                                           {task.images.map((url, idx) => (
+                                             <div
+                                               key={idx}
+                                               onClick={(e) => {
+                                                 e.preventDefault();
+                                                 e.stopPropagation();
+                                                 console.log('MODAL IMAGE CLICKED!', url);
+                                                 setViewingImage(url);
+                                               }}
+                                               className="w-16 h-16 rounded-lg overflow-hidden border-2 border-green-400 cursor-pointer hover:border-blue-500 transition-all active:scale-95 bg-white"
+                                               style={{ position: 'relative', zIndex: 11 }}
+                                             >
+                                               <img 
+                                                 src={url} 
+                                                 alt="" 
+                                                 className="w-full h-full object-cover"
+                                                 style={{ pointerEvents: 'none' }}
+                                               />
+                                             </div>
+                                           ))}
+                                         </div>
+                                       )}
                                     </div>
                                     <div className="text-right">
                                        <p className="text-[8px] font-black text-slate-400 uppercase">Bill To</p>
@@ -618,6 +675,23 @@ const MaintenancePage = () => {
                </div>
             </div>
          )}
+
+         {viewingImage && (
+          <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50" onClick={() => setViewingImage(null)}>
+            <button
+              onClick={() => setViewingImage(null)}
+              className="absolute top-4 right-4 bg-white text-slate-900 rounded-full p-3 hover:bg-slate-100"
+            >
+              <FaTimes size={20} />
+            </button>
+            <img
+              src={viewingImage}
+              alt="Full view"
+              className="max-w-full max-h-full object-contain rounded-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

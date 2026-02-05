@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Sidebar from '../components/Sidebar';
+import SuccessToast from '../components/SuccessToast';
 import { 
   FaSearch, FaKey, FaUnlock, FaLock, FaPause, FaPlay, FaPaperPlane, FaBell, FaCheckCircle, FaHome, FaSignOutAlt, FaBars
 } from "react-icons/fa";
@@ -11,6 +12,7 @@ export default function TechSupportPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const [notification, setNotification] = useState({ title: '', message: '', type: 'All Users' });
+  const [successMessage, setSuccessMessage] = useState(null);
   
   const [users, setUsers] = useState([
     { id: 'EMP001', name: 'Regina Principal', username: 'Regina@principal', status: 'Active', locked: true },
@@ -43,7 +45,7 @@ export default function TechSupportPage() {
 
   const handleResetPassword = () => {
     const newPass = Math.random().toString(36).slice(-8).toUpperCase();
-    alert(`✅ PASSWORD RESET SUCCESSFUL\n\nNew Temp Password: ${newPass}`);
+    setSuccessMessage(`Password reset successful! New temp password: ${newPass}`);
     addToLog(`Reset password for ${selectedUser.username}`);
   };
 
@@ -64,7 +66,7 @@ export default function TechSupportPage() {
   const handleSendBroadcast = () => {
     if(!notification.title || !notification.message) return;
     setTimeout(() => {
-      alert(`🚀 BROADCAST SENT\nTo: ${notification.type}`);
+      setSuccessMessage(`Broadcast sent to ${notification.type}`);
       addToLog(`Sent Broadcast: "${notification.title}"`);
       setNotification({ title: '', message: '', type: 'All Users' });
     }, 500);
@@ -195,6 +197,10 @@ export default function TechSupportPage() {
           </div>
         </div>
       </main>
+
+      {successMessage && (
+        <SuccessToast message={successMessage} onClose={() => setSuccessMessage(null)} />
+      )}
     </div>
   );
 }

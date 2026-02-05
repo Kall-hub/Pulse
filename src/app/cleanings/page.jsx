@@ -83,7 +83,7 @@ const CleaningPage = () => {
   }, []);
 
   const [formData, setFormData] = useState({ unit: '', cleaner: 'Lindiwe', serviceDate: '', time: '', selectedZones: [] });
-  const cleaners = ["Lindiwe", "Sarah", "Regina", "Thembi", "Precious"];
+  const cleaners = ["Lindiwe", "Sarah", "Thembi", "Precious"];
 
   // --- ACTIONS ---
   const handleSave = async (e) => {

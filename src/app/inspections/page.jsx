@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import InspectionPicker from '../components/InspectionPicker';
 import Loading from './loading';
+import SuccessToast from '../components/SuccessToast';
 import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../Config/firebaseConfig';
 import inspectionLayout from '../Data/inspection_questions';
@@ -48,6 +49,7 @@ const InspectionHub = () => {
   const [results, setResults] = useState({});
   const [customItems, setCustomItems] = useState({});
   const [newItemInput, setNewItemInput] = useState("");
+  const [successMessage, setSuccessMessage] = useState(null);
 
   // KEY HANDOVER STATE
   const [keyData, setKeyData] = useState({
@@ -608,9 +610,9 @@ const InspectionHub = () => {
                           if (window.bookCleaningFromInspection) {
                             const result = await window.bookCleaningFromInspection(viewingReport.unit, cleaningItems);
                             if (result.success) {
-                              alert(`✅ Cleaning job booked! Go to Housekeeping to schedule date/time.`);
+                              setSuccessMessage("Cleaning job booked! Go to Housekeeping to schedule date/time.");
                             } else {
-                              alert(`❌ Error: ${result.error}`);
+                              setSuccessMessage(`Error: ${result.error}`);
                             }
                           }
                         }}
@@ -704,9 +706,9 @@ const InspectionHub = () => {
                           if (window.bookMaintenanceFromInspection) {
                             const result = await window.bookMaintenanceFromInspection(viewingReport.unit, maintenanceItems);
                             if (result.success) {
-                              alert(`✅ Maintenance request created! Go to Maintenance to assign contractor and priority.`);
+                              setSuccessMessage("Maintenance request created! Go to Maintenance to assign contractor and priority.");
                             } else {
-                              alert(`❌ Error: ${result.error}`);
+                              setSuccessMessage(`Error: ${result.error}`);
                             }
                           }
                         }}
@@ -1184,6 +1186,10 @@ const InspectionHub = () => {
                </div>
           </div>
         </div>
+      )}
+
+      {successMessage && (
+        <SuccessToast message={successMessage} onClose={() => setSuccessMessage(null)} />
       )}
     </div>
   );
