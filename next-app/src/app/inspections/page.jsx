@@ -419,7 +419,7 @@ const InspectionHub = () => {
               <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500" size={12} />
               <input type="text" placeholder="Search Unit..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white border border-slate-200 pl-10 pr-4 py-3 rounded-2xl text-[10px] font-bold uppercase tracking-widest outline-none focus:ring-2 ring-blue-500 shadow-sm" />
             </div>
-            {(userRole === 'Agent' || userRole === 'Maintenance Admin') && (
+            {(userRole === 'Agent' || userRole === 'Maintenance Admin' || userRole === 'PQA') && (
               <button onClick={() => setIsPickerOpen(true)} className="bg-slate-900 text-white py-3.5 px-6 rounded-2xl shadow-xl flex items-center space-x-3 active:scale-95 border-b-4 border-blue-600 shrink-0 hover:bg-slate-800 transition-all">
                 <FaPlus size={12} /> <span className="text-[10px] font-black uppercase tracking-widest">Book</span>
               </button>

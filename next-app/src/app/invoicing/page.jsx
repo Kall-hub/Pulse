@@ -331,7 +331,7 @@ const InvoicingPage = () => {
                         </div>
                     </div>
 
-                    {userRole === 'Maintenance Admin' ? (
+                    {(userRole === 'Maintenance Admin' || userRole === 'PQA') ? (
                       <button disabled={!unit || cart.length === 0} onClick={createDraft} className="w-full mt-8 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white py-5 rounded-2xl font-black uppercase text-[11px] tracking-widest transition-all active:scale-95 shadow-xl shadow-blue-500/20 flex items-center justify-center space-x-3">
                           <FaFileInvoice size={14} /><span>Create Draft Invoice</span>
                       </button>

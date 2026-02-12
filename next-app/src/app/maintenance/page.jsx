@@ -253,7 +253,7 @@ const MaintenancePage = () => {
                       <p className="text-slate-400 font-bold mt-1 tracking-widest text-[9px] uppercase italic"> Lifecycle Management</p>
                     </div>
                   </div>
-                  {userRole === 'Maintenance Admin' && (
+                  {(userRole === 'Maintenance Admin' || userRole === 'PQA') && (
                     <button onClick={() => setIsLogModalOpen(true)} className="w-full md:w-auto bg-slate-900 text-white py-4 md:py-3 px-6 rounded-xl shadow-xl flex items-center justify-center space-x-2 active:scale-95 border-b-4 border-blue-600 transition-all hover:bg-slate-800">
                       <FaPlus size={12} /> <span className="text-[10px] font-black uppercase tracking-widest">Log Request</span>
                     </button>
