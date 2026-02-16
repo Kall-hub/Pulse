@@ -186,7 +186,16 @@ const ClearancePage = () => {
                     const maintenanceCheck = buildMaintenanceCheck(maintenanceForUnit);
                     const cleaningCheck = buildCleaningCheck(cleaningsForUnit);
 
-                    const totalInvoiced = invoicesForUnit.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0);
+                    // Only count invoices if there are maintenance tasks with 'Tenant' liability
+                    const hasTenantLiability = maintenanceForUnit.some(ticket => 
+                        Array.isArray(ticket.tasks) && 
+                        ticket.tasks.some(task => task.liability === 'Tenant')
+                    );
+                    
+                    const totalInvoiced = hasTenantLiability 
+                        ? invoicesForUnit.reduce((sum, inv) => sum + (Number(inv.total) || 0), 0)
+                        : 0;
+                    
                     const checks = { keys: keysCheck, inspection: inspectionCheck, maintenance: maintenanceCheck, cleaning: cleaningCheck };
                     const status = buildStatus(checks);
                     const issues = extractInspectionIssues(latestInspection);

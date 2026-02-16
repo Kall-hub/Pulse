@@ -163,6 +163,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
            {(isOpen || isMobile) && <p className="px-4 pt-6 pb-2 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Finance</p>}
            <NavItem icon={<FaQuoteLeft size={18}/>} label="Quotations" isOpen={isOpen || isMobile} href="/quotations" active={pathname === '/quotations'} />
            <NavItem icon={<FaFileInvoiceDollar size={18}/>} label="Invoicing" isOpen={isOpen || isMobile} href="/invoicing" active={pathname === '/invoicing'} />
+           <NavItem icon={<BiTask size={20}/>} label="Reports" isOpen={isOpen || isMobile} href="/reports" active={pathname === '/reports'} />
            <NavItem icon={<FaMoneyBill size={20}/>} label="Clearance" isOpen={isOpen || isMobile} href="/clearance" active={pathname === '/clearance'} />
 
            {/* SYSTEM CONTROL */}

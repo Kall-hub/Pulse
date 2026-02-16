@@ -1,9 +1,11 @@
 "use client";
 import { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar';
+import { db } from '../Config/firebaseConfig';
+import { collection, onSnapshot, query, orderBy, addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { 
   FaSearch, FaFilter, FaPaperPlane, FaImage, FaCheckCircle, 
-  FaClock, FaUserCircle, FaChevronLeft, FaEllipsisV, FaBars
+  FaClock, FaUserCircle, FaChevronLeft, FaEllipsisV, FaBars, FaTimes
 } from "react-icons/fa";
 import { BiSupport } from "react-icons/bi";
 
@@ -12,34 +14,53 @@ const HelpDeskPage = () => {
   const [activeChat, setActiveChat] = useState(null); // If null, show list. If set, show chat.
   const [mobileView, setMobileView] = useState('list'); // 'list' or 'chat'
 
-  // MOCK TICKETS
-  const [tickets, setTickets] = useState([
-    { 
-      id: 1, tenant: "Kally Mashigo", unit: "A612", status: "Open", 
-      subject: "Leaking Tap", lastMsg: "It's dripping constantly now.", 
-      time: "10:30", unread: 2, priority: "High" 
-    },
-    { 
-      id: 2, tenant: "Sarah Jones", unit: "B205", status: "Resolved", 
-      subject: "Wifi Password", lastMsg: "Thanks, it works now!", 
-      time: "Yesterday", unread: 0, priority: "Low" 
-    },
-    { 
-      id: 3, tenant: "John Doe", unit: "C101", status: "Pending", 
-      subject: "Noise Complaint", lastMsg: "I will check the cameras.", 
-      time: "Mon", unread: 0, priority: "Medium" 
-    },
-  ]);
-
-  // MOCK MESSAGES
-  const [messages, setMessages] = useState([
-    { id: 1, sender: 'user', text: "Hi, I have a leak in the kitchen.", time: "09:00" },
-    { id: 2, sender: 'admin', text: "Thanks for reporting. Is it the hot or cold tap?", time: "09:05" },
-    { id: 3, sender: 'user', text: "It's the cold tap.", time: "09:10" },
-    { id: 4, sender: 'user', text: "It's dripping constantly now.", time: "10:30" },
-  ]);
-
+  // TICKETS FROM FIREBASE
+  const [tickets, setTickets] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [viewingImage, setViewingImage] = useState(null);
+  
   const messagesEndRef = useRef(null);
+  
+  // Load all support tickets from Firebase
+  useEffect(() => {
+    const q = query(
+      collection(db, 'supportTickets'),
+      orderBy('updatedAt', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const ticketsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setTickets(ticketsData);
+    });
+    
+    return () => unsubscribe();
+  }, []);
+  
+  // Load messages for active chat
+  useEffect(() => {
+    if (!activeChat) {
+      setMessages([]);
+      return;
+    }
+    
+    const q = query(
+      collection(db, 'supportTickets', activeChat.id, 'messages'),
+      orderBy('timestamp', 'asc')
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const messagesData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setMessages(messagesData);
+    });
+    
+    return () => unsubscribe();
+  }, [activeChat]);
 
   // Responsive Sidebar Logic
   useEffect(() => {
@@ -69,19 +90,49 @@ const HelpDeskPage = () => {
     setTimeout(() => setActiveChat(null), 300); // Delay clear for animation effect if needed
   };
 
-  const sendMessage = (e) => {
+  const sendMessage = async (e) => {
     e.preventDefault();
     const form = e.target;
     const text = form.message.value;
     if (!text.trim()) return;
     
-    setMessages([...messages, { 
-      id: Date.now(), 
-      sender: 'admin', 
-      text: text, 
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-    }]);
-    form.reset();
+    try {
+      await addDoc(collection(db, 'supportTickets', activeChat.id, 'messages'), {
+        text: text,
+        sender: 'helpdesk',
+        senderName: 'Support Team',
+        timestamp: serverTimestamp()
+      });
+      
+      // Update ticket's updatedAt and lastMessage
+      await updateDoc(doc(db, 'supportTickets', activeChat.id), {
+        updatedAt: serverTimestamp(),
+        lastMessage: text
+      });
+      
+      form.reset();
+    } catch (error) {
+      console.error('Error sending message:', error);
+      alert('Failed to send message');
+    }
+  };
+  
+  const resolveTicket = async () => {
+    if (!activeChat) return;
+    if (!confirm('Mark this ticket as resolved?')) return;
+    
+    try {
+      await updateDoc(doc(db, 'supportTickets', activeChat.id), {
+        status: 'Resolved',
+        resolvedAt: serverTimestamp()
+      });
+      
+      setMobileView('list');
+      setTimeout(() => setActiveChat(null), 300);
+    } catch (error) {
+      console.error('Error resolving ticket:', error);
+      alert('Failed to resolve ticket');
+    }
   };
 
   return (
@@ -127,28 +178,48 @@ const HelpDeskPage = () => {
 
             {/* List */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
-              {tickets.map(ticket => (
-                // NOTE: Using div instead of button to prevent nesting errors if we add actions later
-                <div 
-                  key={ticket.id} 
-                  onClick={() => openChat(ticket)}
-                  className={`p-4 rounded-xl cursor-pointer transition-all border border-transparent hover:bg-slate-50
-                    ${activeChat?.id === ticket.id ? 'bg-blue-50 border-blue-200 shadow-sm' : ''}
-                  `}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <div className="flex items-center gap-2">
-                        {ticket.unread > 0 && <span className="w-2 h-2 bg-blue-600 rounded-full"></span>}
-                        <span className="text-xs font-black text-slate-900 uppercase">{ticket.tenant}</span>
-                        <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold">{ticket.unit}</span>
-                    </div>
-                    <span className="text-[9px] font-bold text-slate-400">{ticket.time}</span>
-                  </div>
-                  
-                  <h4 className="text-xs font-bold text-slate-700 truncate mb-0.5">{ticket.subject}</h4>
-                  <p className="text-[10px] text-slate-500 truncate">{ticket.lastMsg}</p>
+              {tickets.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <BiSupport size={40} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-xs font-bold uppercase tracking-widest">No tickets yet</p>
                 </div>
-              ))}
+              ) : (
+                tickets.map(ticket => {
+                  const updatedDate = ticket.updatedAt?.toDate?.();
+                  const timeLabel = updatedDate ? updatedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'New';
+                  
+                  return (
+                    <div 
+                      key={ticket.id} 
+                      onClick={() => openChat(ticket)}
+                      className={`p-4 rounded-xl cursor-pointer transition-all border border-transparent hover:bg-slate-50
+                        ${activeChat?.id === ticket.id ? 'bg-blue-50 border-blue-200 shadow-sm' : ''}
+                      `}
+                    >
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-900 uppercase">{ticket.tenant}</span>
+                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold">{ticket.unit}</span>
+                        </div>
+                        <span className="text-[9px] font-bold text-slate-400">{timeLabel}</span>
+                      </div>
+                      
+                      <h4 className="text-xs font-bold text-slate-700 truncate mb-0.5">{ticket.subject}</h4>
+                      <p className="text-[10px] text-slate-500 truncate">{ticket.lastMessage || 'No messages yet'}</p>
+                      
+                      <div className="mt-2">
+                        <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                          ticket.status === 'Open' ? 'bg-green-100 text-green-700' :
+                          ticket.status === 'Resolved' ? 'bg-slate-100 text-slate-500' :
+                          'bg-orange-100 text-orange-700'
+                        }`}>
+                          {ticket.status}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -177,7 +248,7 @@ const HelpDeskPage = () => {
                   </div>
                   
                   <div className="flex gap-2">
-                    <button className="bg-green-50 text-green-600 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 hover:bg-green-100 transition-colors">
+                    <button onClick={resolveTicket} className="bg-green-50 text-green-600 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 hover:bg-green-100 transition-colors">
                         <FaCheckCircle /> <span className="hidden sm:inline">Resolve</span>
                     </button>
                     <button className="text-slate-400 hover:text-slate-600 p-2"><FaEllipsisV /></button>
@@ -191,21 +262,40 @@ const HelpDeskPage = () => {
                     <span className="bg-slate-200 text-slate-500 text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">Today</span>
                   </div>
 
-                  {messages.map((msg) => (
-                    <div key={msg.id} className={`flex ${msg.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`flex flex-col max-w-[85%] md:max-w-[70%] ${msg.sender === 'admin' ? 'items-end' : 'items-start'}`}>
-                        <div className={`p-4 rounded-2xl text-xs font-medium leading-relaxed shadow-sm relative group
-                          ${msg.sender === 'admin' 
-                            ? 'bg-blue-600 text-white rounded-tr-sm' 
-                            : 'bg-white text-slate-700 rounded-tl-sm border border-slate-100'
-                          }
-                        `}>
-                          {msg.text}
+                  {messages.map((msg) => {
+                    const isHelpdesk = msg.sender === 'helpdesk';
+                    const time = msg.timestamp?.toDate?.() ? msg.timestamp.toDate().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : 'Now';
+                    
+                    return (
+                      <div key={msg.id} className={`flex ${isHelpdesk ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`flex flex-col max-w-[85%] md:max-w-[70%] ${isHelpdesk ? 'items-end' : 'items-start'}`}>
+                          {!isHelpdesk && (
+                            <span className="text-[9px] font-bold text-slate-400 uppercase mb-1 px-1">
+                              {msg.senderName || 'Student'}
+                            </span>
+                          )}
+                          <div className={`p-4 rounded-2xl text-xs font-medium leading-relaxed shadow-sm relative group
+                            ${isHelpdesk 
+                              ? 'bg-blue-600 text-white rounded-tr-sm' 
+                              : 'bg-white text-slate-700 rounded-tl-sm border border-slate-100'
+                            }
+                          `}>
+                            {msg.text}
+                            {Array.isArray(msg.images) && msg.images.length > 0 && (
+                              <div className="mt-3 grid grid-cols-3 gap-2">
+                                {msg.images.slice(0, 5).map((url, idx) => (
+                                  <button key={`${msg.id}-img-${idx}`} type="button" onClick={() => setViewingImage(url)} className="block">
+                                    <img src={url} alt="attachment" className="w-full h-20 object-cover rounded-lg border border-white/20 cursor-zoom-in" />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-[9px] font-bold text-slate-400 mt-1 px-1">{time}</span>
                         </div>
-                        <span className="text-[9px] font-bold text-slate-400 mt-1 px-1">{msg.time}</span>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div ref={messagesEndRef} />
                 </div>
 
@@ -244,6 +334,17 @@ const HelpDeskPage = () => {
 
         </div>
       </main>
+
+      {viewingImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4" onClick={() => setViewingImage(null)}>
+          <div className="max-w-4xl w-full">
+            <img src={viewingImage} alt="Full view" className="w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl" />
+          </div>
+          <button type="button" className="absolute top-6 right-6 text-white text-2xl" onClick={() => setViewingImage(null)}>
+            <FaTimes />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

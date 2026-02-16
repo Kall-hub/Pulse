@@ -97,6 +97,34 @@ const ViewingsPage = () => {
   const agentName = `${userData.firstName} ${userData.lastName}`.trim() || 'Agent';
   const [formData, setFormData] = useState({ prospect: '', phone: '', unit: '', date: '', time: '', agent: agentName });
   
+  // Helper: Format phone number for WhatsApp (South African numbers)
+  const formatPhoneForWhatsApp = (phone) => {
+    // Remove all non-numeric characters
+    let cleaned = phone.replace(/\D/g, '');
+    
+    // If starts with 0, replace with 27 (South Africa country code)
+    if (cleaned.startsWith('0')) {
+      cleaned = '27' + cleaned.substring(1);
+    }
+    // If doesn't start with country code, add 27
+    else if (!cleaned.startsWith('27')) {
+      cleaned = '27' + cleaned;
+    }
+    
+    return cleaned;
+  };
+
+  // Helper: Send WhatsApp message
+  const sendWhatsAppLink = (phone, prospect, unit, date, time, bookingId) => {
+    const formattedPhone = formatPhoneForWhatsApp(phone);
+    const cancelUrl = `${window.location.origin}/cancel-viewing?id=${bookingId}`;
+    const message = `Hi ${prospect}! 👋\n\nYour viewing is confirmed for *${unit}* on ${date} at ${time}.\n\nLooking forward to showing you around!\n\n🚫 Need to cancel? Click here:\n${cancelUrl}\n\nOC Rental.`;
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+    
+    // Open WhatsApp in new window
+    window.open(whatsappUrl, '_blank');
+  };
+
   // --- 2. ADD TO DATABASE ---
   const handleBook = async (e) => {
     e.preventDefault();
@@ -106,6 +134,7 @@ const ViewingsPage = () => {
         unit: formData.unit.toUpperCase(), 
         status: 'Link Sent', 
         linkSent: true,
+        whatsappStatus: 'sent', // Track WhatsApp send status
         createdAt: serverTimestamp() // Add timestamp
     };
 
@@ -115,6 +144,9 @@ const ViewingsPage = () => {
         
         // Update Local State (Optimistic UI)
         setViewings([{ id: docRef.id, ...newBooking }, ...viewings]);
+        
+        // Send WhatsApp message with booking ID for cancellation
+        sendWhatsAppLink(formData.phone, formData.prospect, formData.unit.toUpperCase(), formData.date, formData.time, docRef.id);
         
         setIsBookModalOpen(false);
         setFormData({ prospect: '', phone: '', unit: '', date: '', time: '', agent: agentName });
@@ -160,12 +192,32 @@ const ViewingsPage = () => {
     }
   };
 
-  const resendLink = (phone) => {
-    const btn = document.getElementById(`resend-${phone}`);
+  const resendLink = (viewing) => {
+    // Send WhatsApp message with booking ID
+    sendWhatsAppLink(viewing.phone, viewing.prospect, viewing.unit, viewing.date, viewing.time, viewing.id);
+    
+    const btn = document.getElementById(`resend-${viewing.phone}`);
     if(btn) {
         const originalText = btn.innerText;
         btn.innerText = "Sent!";
         setTimeout(() => btn.innerText = originalText, 2000);
+    }
+  };
+
+  const markNoWhatsApp = async (id) => {
+    if(!confirm("Mark this contact as having no WhatsApp?")) return;
+
+    try {
+        const viewingRef = doc(db, "viewings", id);
+        await updateDoc(viewingRef, { 
+            whatsappStatus: 'no-whatsapp',
+            status: 'No WhatsApp'
+        });
+
+        // Update Local State
+        setViewings(prev => prev.map(v => v.id === id ? { ...v, whatsappStatus: 'no-whatsapp', status: 'No WhatsApp' } : v));
+    } catch (error) {
+        console.error("Error updating WhatsApp status:", error);
     }
   };
 
@@ -278,7 +330,8 @@ const ViewingsPage = () => {
                         data={v} 
                         onCancel={() => cancelViewing(v.id)} 
                         onComplete={() => openCompleteModal(v.id)}
-                        onResend={() => resendLink(v.phone)}
+                        onResend={() => resendLink(v)}
+                        onMarkNoWhatsApp={() => markNoWhatsApp(v.id)}
                     />
                 ))
             )}
@@ -362,8 +415,8 @@ const ViewingsPage = () => {
 };
 
 /* COMPONENT: VIEWING CARD (Responsive) */
-const ViewingCard = ({ data, onCancel, onComplete, onResend }) => {
-  const { unit, prospect, phone, agent, date, time, status, outcome, note } = data;
+const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp }) => {
+  const { unit, prospect, phone, agent, date, time, status, outcome, note, whatsappStatus } = data;
   const isCancelled = status.includes('Cancelled');
   const isCompleted = status === 'Completed';
 
@@ -435,9 +488,22 @@ const ViewingCard = ({ data, onCancel, onComplete, onResend }) => {
       {/* FOOTER ACTIONS */}
       {!isCancelled && !isCompleted && (
           <div className="px-6 md:px-8 py-4 bg-slate-50/50 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-            <button id={`resend-${data.phone}`} onClick={onResend} className="flex items-center space-x-2 text-[9px] font-black uppercase text-blue-500 hover:text-blue-700 transition-colors w-full md:w-auto justify-center md:justify-start">
-                <FaWhatsapp size={14} /> <span>Resend Link</span>
-            </button>
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              {whatsappStatus === 'no-whatsapp' ? (
+                <div className="flex items-center space-x-2 text-[9px] font-black uppercase text-red-500">
+                  <FaBan size={14} /> <span>No WhatsApp</span>
+                </div>
+              ) : (
+                <>
+                  <button id={`resend-${data.phone}`} onClick={onResend} className="flex items-center space-x-2 text-[9px] font-black uppercase text-blue-500 hover:text-blue-700 transition-colors">
+                      <FaWhatsapp size={14} /> <span>Resend Link</span>
+                  </button>
+                  <button onClick={onMarkNoWhatsApp} className="flex items-center space-x-1 text-[8px] font-black uppercase text-slate-400 hover:text-red-500 transition-colors">
+                      <FaBan size={10} /> <span>No WA</span>
+                  </button>
+                </>
+              )}
+            </div>
             <div className="flex space-x-3 w-full md:w-auto">
                 <button onClick={onCancel} className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white hover:bg-red-500 hover:border-red-500 transition-all">
                     Cancel

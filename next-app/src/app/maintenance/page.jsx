@@ -8,7 +8,7 @@ import {
   FaPlus, FaTools, FaClock, FaSearch, 
   FaCheckCircle, FaBars,
   FaFileSignature, FaExclamationCircle, 
-  FaTrash, FaPrint, FaArrowRight, FaCheck, FaTimes
+  FaTrash, FaPrint, FaArrowRight, FaCheck, FaTimes, FaUserCircle
 } from "react-icons/fa";
 
 import { db, auth } from '../Config/firebaseConfig';
@@ -325,18 +325,56 @@ const MaintenancePage = () => {
                       </div>
                       
                       <div className="flex flex-wrap items-center gap-3">
-                          <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
+                              <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
                             <FaTools className="text-slate-400 mr-2" size={12}/>
                             <select 
                                 value={job.contractor || 'Unassigned'}
                                 onChange={(e) => updateTicketField(job.id, 'contractor', e.target.value)}
-                                className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 w-24"
+                                className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 w-28"
                             >
                                 <option value="Unassigned">Assign Tech</option>
                                 <option value="Rasta">Rasta</option>
                                 <option value="Johannes">Johannes</option>
                                 <option value="Other">Other</option>
+                                <option value="External">External</option>
                             </select>
+                          </div>
+
+                          <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
+                            <FaTools className="text-slate-400 mr-2" size={12}/>
+                            <select 
+                                value={job.externalContractor || ''}
+                                onChange={(e) => updateTicketField(job.id, 'externalContractor', e.target.value)}
+                                disabled={job.contractor !== 'External'}
+                                className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 w-28 disabled:text-slate-300"
+                            >
+                                <option value="">External</option>
+                                <option value="Terry">Terry</option>
+                                <option value="Kobus">Kobus</option>
+                                <option value="Chris">Chris</option>
+                                <option value="Derick">Derick</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
+                            <FaClock className="text-slate-400 mr-2" size={12}/>
+                            <input
+                                type="date"
+                                value={job.appointmentDate || ''}
+                                onChange={(e) => updateTicketField(job.id, 'appointmentDate', e.target.value)}
+                                className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 w-28"
+                            />
+                          </div>
+
+                          <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
+                            <FaUserCircle className="text-slate-400 mr-2" size={12}/>
+                            <input
+                                type="tel"
+                                placeholder="Tenant #"
+                                value={job.tenantPhone || ''}
+                                onChange={(e) => updateTicketField(job.id, 'tenantPhone', e.target.value)}
+                                className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 w-28"
+                            />
                           </div>
 
                           <select 
@@ -422,11 +460,25 @@ const MaintenancePage = () => {
                         <div className="bg-slate-50 rounded-4xl p-6 flex flex-col justify-between border border-slate-100">
                            <div>
                               <div className="flex items-center space-x-4 mb-4">
-                                 <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white"><FaTools size={20} /></div>
-                                 <div>
-                                    <p className="text-[8px] font-black text-slate-400 uppercase">Assigned Tech</p>
-                                    <p className="text-sm font-black text-slate-900 uppercase italic">{job.contractor || 'Unassigned'}</p>
-                                 </div>
+                                <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white"><FaTools size={20} /></div>
+                                <div>
+                                  <p className="text-[8px] font-black text-slate-400 uppercase">Assigned Tech</p>
+                                  <p className="text-sm font-black text-slate-900 uppercase italic">
+                                    {job.contractor === 'External'
+                                     ? `External · ${job.externalContractor || 'Unassigned'}`
+                                     : (job.contractor || 'Unassigned')}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="space-y-3 text-xs font-bold text-slate-600">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[8px] font-black uppercase text-slate-400">Appointment</span>
+                                  <span>{job.appointmentDate || 'Not set'}</span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[8px] font-black uppercase text-slate-400">Tenant Phone</span>
+                                  <span>{job.tenantPhone || 'Not set'}</span>
+                                </div>
                               </div>
                            </div>
                            <div className="pt-6 border-t border-slate-200 mt-6">
@@ -615,6 +667,10 @@ const MaintenancePage = () => {
                     <h1 className="text-3xl font-black uppercase">OC PULSE</h1>
                     <p className="text-xs font-bold uppercase text-slate-500">Maintenance Report</p>
                   </div>
+                  <div className="text-center">
+                    <p className="text-[10px] font-black uppercase text-slate-500">Appointment Date</p>
+                    <p className="text-2xl font-black uppercase">{printTicket.appointmentDate || 'Not Set'}</p>
+                  </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black uppercase text-slate-500">Date</p>
                     <p className="text-4xl font-black">
@@ -627,6 +683,10 @@ const MaintenancePage = () => {
                   <div className="col-span-3">
                     <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Owner Approved Date</p>
                     <div className="border-2 border-slate-900 rounded-lg h-10 mt-1"></div>
+                    <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em] mt-3">Tenant Phone</p>
+                    <div className="border-2 border-slate-900 rounded-lg h-10 mt-1 flex items-center px-2">
+                      <span className="text-sm font-black uppercase">{printTicket.tenantPhone || ''}</span>
+                    </div>
                   </div>
                   <div className="col-span-3">
                     <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Property</p>
@@ -634,20 +694,24 @@ const MaintenancePage = () => {
                   </div>
                   <div className="col-span-3 text-center">
                     <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Contractor Assigned</p>
-                    <p className="text-xl font-black uppercase">{printTicket.contractor || 'Unassigned'}</p>
+                    <p className="text-xl font-black uppercase">
+                      {printTicket.contractor === 'External'
+                        ? `External · ${printTicket.externalContractor || 'Unassigned'}`
+                        : (printTicket.contractor || 'Unassigned')}
+                    </p>
                   </div>
-                  <div className="col-span-3 text-right space-y-2">
+                  <div className="col-span-3 text-right space-y-2 flex flex-col items-end">
                     <div>
                       <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Ticket Number</p>
                       <p className="text-xl font-black">{printTicket.displayId}</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">LMS Ticket</p>
-                      <div className="border-2 border-slate-900 rounded-lg h-6"></div>
+                      <div className="border-2 border-slate-900 rounded-lg h-5 w-20"></div>
                     </div>
                     <div>
                       <p className="text-[10px] font-black uppercase text-slate-500 tracking-[0.2em]">Invoice</p>
-                      <div className="border-2 border-slate-900 rounded-lg h-6"></div>
+                      <div className="border-2 border-slate-900 rounded-lg h-5 w-20"></div>
                     </div>
                   </div>
                </div>
@@ -657,7 +721,7 @@ const MaintenancePage = () => {
                   
                   <div className="space-y-3">
                     {printIssues.map(issue => (
-                      <div key={issue.id} className={`border rounded-xl p-4 flex items-start justify-between gap-4 ${issue.done ? 'border-slate-900/40 bg-slate-50' : 'border-slate-900/20'}`}>
+                      <div key={issue.id} className={`border rounded-xl p-3 flex items-start justify-between gap-4 ${issue.done ? 'border-slate-900/40 bg-slate-50' : 'border-slate-900/20'}`}>
                         <div className="flex items-center gap-3 flex-1">
                           <div className={`w-5 h-5 rounded flex-shrink-0 mt-1 flex items-center justify-center ${issue.done ? 'bg-slate-900 border-2 border-slate-900' : 'border-2 border-slate-900'}`}>
                             {issue.done && <span className="text-white text-xs font-black">✓</span>}

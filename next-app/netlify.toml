@@ -1,0 +1,11 @@
+[build]
+  base = "next-app"
+  command = "npm run build"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_FONT_GOOGLE_MOCKED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

@@ -8,3 +8,14 @@
     * { -ms-overflow-style: none; scrollbar-width: none; } *::-webkit-scrollbar { display: none; }
   }
 }
+
+/* Report PDF styling */
+.hidden-on-screen {
+  display: none;
+}
+
+@media print {
+  .hidden-on-screen {
+    display: block;
+  }
+}
