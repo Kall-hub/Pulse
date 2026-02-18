@@ -473,7 +473,7 @@ const MaintenancePage = () => {
                               <div className="space-y-3 text-xs font-bold text-slate-600">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[8px] font-black uppercase text-slate-400">Appointment</span>
-                                  <span>{job.appointmentDate || 'Not set'}</span>
+                                  <span>{job.appointmentDate || ''}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-[8px] font-black uppercase text-slate-400">Tenant Phone</span>
@@ -669,7 +669,7 @@ const MaintenancePage = () => {
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] font-black uppercase text-slate-500">Appointment Date</p>
-                    <p className="text-2xl font-black uppercase">{printTicket.appointmentDate || 'Not Set'}</p>
+                    <p className="text-2xl font-black uppercase">{printTicket.appointmentDate || ''}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black uppercase text-slate-500">Date</p>
