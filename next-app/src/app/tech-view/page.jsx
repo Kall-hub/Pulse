@@ -297,6 +297,14 @@ const TechView = () => {
               <div>
                 <h2 className="text-2xl font-black uppercase italic text-slate-900">{activeJob.unit}</h2>
                 <p className="text-xs text-slate-500 font-bold uppercase mt-1">{activeJob.displayId}</p>
+                {activeJob.appointmentDate && (
+                  <div className="flex items-center gap-2 mt-2 bg-blue-50 px-3 py-1.5 rounded-lg inline-flex">
+                    <FaClock className="text-blue-600" size={12} />
+                    <p className="text-xs font-black text-blue-700 uppercase">
+                      Appointment: {activeJob.appointmentDate}
+                    </p>
+                  </div>
+                )}
               </div>
               <button onClick={() => setActiveJob(null)} className="bg-slate-100 p-3 rounded-xl text-slate-600 hover:bg-slate-200">
                 <FaTimes />
