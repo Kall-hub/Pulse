@@ -90,7 +90,7 @@ const InvoicingPage = () => {
     ],
     Labor: [
         { id: 5, name: "Call-out fee", price: 250, icon: <FaHammer/> },
-        { id: 6, name: "Call-out and labour", price: 450, icon: <FaHammer/> },
+        { id: 6, name: "Call-out and labour", price: 550, icon: <FaHammer/> },
     ],
     Cleaning: [
         { id: 7, name: "1 Bedroom flat", price: 500, icon: <FaBroom/> },
@@ -261,7 +261,7 @@ const InvoicingPage = () => {
                       type="number" 
                       value={vat} 
                       onChange={(e) => setVat(parseFloat(e.target.value) || 0)}
-                      className="w-12 text-sm font-black text-slate-900 outline-none border-b border-slate-200 focus:border-blue-500 text-center"
+                      className="w-20 px-2 py-1 text-base font-semibold text-slate-900 outline-none border-b border-slate-200 focus:border-blue-500 text-center hover:bg-blue-50 cursor-pointer transition-colors"
                   />
               </div>
              )}
