@@ -32,6 +32,7 @@ const InvoicingPage = () => {
   const [viewingInvoice, setViewingInvoice] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [userRole, setUserRole] = useState(null);
+  const [currentUserName, setCurrentUserName] = useState(null);
 
   // Fetch invoices from Firestore on mount
   useEffect(() => {
@@ -45,8 +46,11 @@ const InvoicingPage = () => {
           if (userDoc.exists()) {
             setUserRole(userDoc.data().role);
           }
+          // Get user's display name or email
+          setCurrentUserName(currentUser.displayName || currentUser.email || 'User');
         } catch (error) {
           console.error('Error fetching user role:', error);
+          setCurrentUserName(currentUser.displayName || currentUser.email || 'User');
         }
       }
     });
@@ -147,7 +151,8 @@ const InvoicingPage = () => {
         subtotal: calculateSubtotal(),
         vat: vat,
         date: new Date().toLocaleDateString('en-GB'),
-        status: 'Draft', 
+        status: 'Draft',
+        contractor: currentUserName,
         items: serializableItems,
         createdAt: serverTimestamp()
       };

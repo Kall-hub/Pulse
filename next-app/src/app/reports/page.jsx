@@ -1,17 +1,20 @@
 "use client";
-import { useMemo, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../Config/firebaseConfig';
 import jsPDF from 'jspdf';
 import {
   FaBars,
-  FaCalendarAlt,
-  FaFileInvoice,
-  FaTools,
+  FaSearch,
+  FaPlus,
+  FaTimes,
   FaFilePdf,
-  FaFilter,
-  FaDownload
+  FaEye,
+  FaEdit,
+  FaTrash,
+  FaCalendarAlt,
+  FaFilter
 } from 'react-icons/fa';
 
 const ReportsPage = () => {
@@ -21,25 +24,21 @@ const ReportsPage = () => {
     const today = new Date();
     return today.toISOString().slice(0, 10);
   });
-  const [rangeStart, setRangeStart] = useState('');
-  const [rangeEnd, setRangeEnd] = useState('');
-  const [rangeMode, setRangeMode] = useState('auto');
-  const [sourceFilter, setSourceFilter] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showBuilder, setShowBuilder] = useState(false);
-  const [manualItems, setManualItems] = useState([]);
-  const [manualDraft, setManualDraft] = useState({
-    date: '',
-    unit: '',
-    issue: '',
-    who: '',
-    amount: ''
-  });
-  const [overridesEnabled, setOverridesEnabled] = useState(false);
-  const [overrideAmounts, setOverrideAmounts] = useState({});
-
-  const [maintenanceJobs, setMaintenanceJobs] = useState([]);
+  
+  // Search & Selection State
+  const [searchInput, setSearchInput] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [reportItems, setReportItems] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editingData, setEditingData] = useState({});
+  
+  // Data
   const [invoices, setInvoices] = useState([]);
+  const [buildings, setBuildings] = useState([]);
+  
+  // PDF Viewer
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [showPdfViewer, setShowPdfViewer] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -51,13 +50,14 @@ const ReportsPage = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Fetch invoices & buildings
   useEffect(() => {
-    const maintenanceQuery = query(collection(db, 'maintenance'), orderBy('createdAt', 'desc'));
+    const buildingsQuery = query(collection(db, 'buildings'));
     const invoiceQuery = query(collection(db, 'invoices'), orderBy('createdAt', 'desc'));
 
-    const unsubscribeMaintenance = onSnapshot(maintenanceQuery, (snapshot) => {
-      const rows = snapshot.docs.map((docItem) => ({ id: docItem.id, ...docItem.data() }));
-      setMaintenanceJobs(rows);
+    const unsubscribeBuildings = onSnapshot(buildingsQuery, (snapshot) => {
+      const buildingsList = snapshot.docs.map((docItem) => ({ id: docItem.id, ...docItem.data() }));
+      setBuildings(buildingsList);
     });
 
     const unsubscribeInvoices = onSnapshot(invoiceQuery, (snapshot) => {
@@ -66,311 +66,462 @@ const ReportsPage = () => {
     });
 
     return () => {
-      unsubscribeMaintenance();
+      unsubscribeBuildings();
       unsubscribeInvoices();
     };
   }, []);
 
-  const toDateValue = (value) => {
-    if (!value) return null;
-    if (typeof value?.toDate === 'function') return value.toDate();
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? null : d;
-  };
-
-  const getWeekRange = (date) => {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = (day === 0 ? -6 : 1) - day; // Monday start
-    const start = new Date(d);
-    start.setDate(d.getDate() + diff);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
-  };
-
-  const getMonthRange = (date) => {
-    const d = new Date(date);
-    const start = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0);
-    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-    return { start, end };
-  };
-
-  const setAutoRange = (nextAnchor, nextPeriod) => {
-    const anchor = new Date(nextAnchor);
-    const range = nextPeriod === 'weekly' ? getWeekRange(anchor) : getMonthRange(anchor);
-    setRangeStart(range.start.toISOString().slice(0, 10));
-    setRangeEnd(range.end.toISOString().slice(0, 10));
-  };
-
-  useEffect(() => {
-    if (rangeMode === 'auto') {
-      setAutoRange(anchorDate, period);
+  // Search invoices by number
+  const handleSearch = (query) => {
+    setSearchInput(query);
+    if (query.trim() === '') {
+      setSearchResults([]);
+      return;
     }
-  }, [anchorDate, period, rangeMode]);
-
-  const handleAddManualItem = () => {
-    if (!manualDraft.issue || !manualDraft.amount || !manualDraft.date) return;
-    const id = `manual-${Date.now()}`;
-    setManualItems((prev) => [
-      ...prev,
-      {
-        id,
-        type: 'Manual',
-        date: manualDraft.date,
-        unit: manualDraft.unit || 'N/A',
-        issue: manualDraft.issue,
-        who: manualDraft.who || 'Manual',
-        amount: Number(manualDraft.amount || 0),
-        status: 'Manual'
-      }
-    ]);
-    setManualDraft({ date: '', unit: '', issue: '', who: '', amount: '' });
+    
+    const results = invoices.filter(inv => 
+      inv.invoiceNumber?.toString().includes(query) ||
+      inv.unit?.toLowerCase().includes(query.toLowerCase())
+    );
+    setSearchResults(results);
   };
 
-  const handleRemoveManualItem = (id) => {
-    setManualItems((prev) => prev.filter((item) => item.id !== id));
-  };
-
-  const rows = useMemo(() => {
-    const startDate = rangeStart ? new Date(rangeStart) : new Date(anchorDate);
-    const endDate = rangeEnd ? new Date(rangeEnd) : new Date(anchorDate);
-    const range = {
-      start: rangeStart ? new Date(startDate.setHours(0, 0, 0, 0)) : (period === 'weekly' ? getWeekRange(startDate).start : getMonthRange(startDate).start),
-      end: rangeEnd ? new Date(endDate.setHours(23, 59, 59, 999)) : (period === 'weekly' ? getWeekRange(endDate).end : getMonthRange(endDate).end)
+  // Add invoice to report
+  const addToReport = (invoice) => {
+    if (reportItems.find(item => item.id === invoice.id)) {
+      alert('Already added to report');
+      return;
+    }
+    
+    const toDateValue = (value) => {
+      if (!value) return null;
+      if (typeof value?.toDate === 'function') return value.toDate();
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? null : d;
     };
 
-    const maintenanceRows = maintenanceJobs.map((job) => {
-      const contractor = job.contractor === 'External'
-        ? `External · ${job.externalContractor || 'Unassigned'}`
-        : (job.contractor || 'Unassigned');
-      const amount = Number(job.totalCost || job.amount || job.charge || 0);
-      const dateValue = toDateValue(job.completedAt || job.issueDate || job.createdAt || job.loggedAt);
+    const building = buildings.find(b => b.units?.includes(invoice.unit));
+    const isInternal = building && ['Rasta', 'Johannese'].includes(building.name);
 
-      return {
-        id: `maint-${job.id}`,
-        type: 'Maintenance',
-        unit: job.unit || 'N/A',
-        issue: job.issue || 'Maintenance job',
-        who: contractor,
-        amount,
-        status: job.status || 'active',
-        dateValue
-      };
-    });
+    // Extract job description from invoice items
+    const jobDescription = invoice.items?.map(item => item.name).join(', ') || 'No description';
 
-    const invoiceRows = invoices.map((inv) => {
-      const amount = Number(inv.total || 0);
-      // Handle GB date format (DD/MM/YYYY) from invoicing page
-      let dateValue = null;
-      if (inv.date && typeof inv.date === 'string') {
-        const parts = inv.date.split('/');
-        if (parts.length === 3) {
-          dateValue = new Date(parts[2], parts[1] - 1, parts[0]);
-        }
-      } else {
-        dateValue = toDateValue(inv.createdAt);
-      }
-      const issue = inv.referenceInvoice ? `Ref ${inv.referenceInvoice}` : 'Invoice';
+    const reportItem = {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber || '',
+      unit: invoice.unit || '',
+      amount: Number(invoice.items?.reduce((sum, item) => sum + (item.price * item.qty), 0) || 0),
+      date: toDateValue(invoice.createdAt)?.toISOString().split('T')[0] || '',
+      contractor: invoice.contractor || '',
+      jobDone: jobDescription,
+      internal: isInternal,
+      status: invoice.status || 'Draft'
+    };
 
-      return {
-        id: `inv-${inv.id}`,
-        type: 'Invoice',
-        unit: inv.unit || 'N/A',
-        issue,
-        who: 'Finance',
-        amount,
-        status: inv.status || 'Draft',
-        dateValue
-      };
-    });
+    setReportItems([...reportItems, reportItem]);
+    setSearchInput('');
+    setSearchResults([]);
+  };
 
-    const manualRows = manualItems.map((item) => {
-      const dateValue = toDateValue(item.date);
-      return {
-        id: item.id,
-        type: 'Manual',
-        unit: item.unit,
-        issue: item.issue,
-        who: item.who,
-        amount: item.amount,
-        status: item.status,
-        dateValue
-      };
-    });
+  // Remove from report
+  const removeFromReport = (id) => {
+    setReportItems(reportItems.filter(item => item.id !== id));
+  };
 
-    const combined = [...maintenanceRows, ...invoiceRows, ...manualRows];
+  // Edit item
+  const startEdit = (id) => {
+    const item = reportItems.find(i => i.id === id);
+    setEditingId(id);
+    setEditingData({ ...item });
+  };
 
-    return combined
-      .filter((row) => {
-        if (sourceFilter !== 'all' && row.type.toLowerCase() !== sourceFilter) return false;
-        if (!row.dateValue) return false;
-        return row.dateValue >= range.start && row.dateValue <= range.end;
-      })
-      .filter((row) => {
-        const q = searchQuery.trim().toLowerCase();
-        if (!q) return true;
-        return (
-          row.unit.toLowerCase().includes(q) ||
-          row.issue.toLowerCase().includes(q) ||
-          row.who.toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => (b.dateValue?.getTime?.() || 0) - (a.dateValue?.getTime?.() || 0));
-  }, [maintenanceJobs, invoices, manualItems, anchorDate, period, rangeStart, rangeEnd, sourceFilter, searchQuery]);
+  const saveEdit = () => {
+    setReportItems(reportItems.map(item => 
+      item.id === editingId ? editingData : item
+    ));
+    setEditingId(null);
+  };
 
-  const totals = useMemo(() => {
-    const totalAmount = rows.reduce((sum, row) => {
-      const override = overrideAmounts[row.id];
-      const amount = override !== undefined ? Number(override || 0) : Number(row.amount || 0);
-      return sum + amount;
-    }, 0);
-    const maintenanceCount = rows.filter((row) => row.type === 'Maintenance').length;
-    const invoiceCount = rows.filter((row) => row.type === 'Invoice').length;
-    return { totalAmount, maintenanceCount, invoiceCount };
-  }, [rows]);
+  // Calculate totals
+  const totalAmount = reportItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
+  // Generate PDF
   const handleExportPDF = () => {
-    if (rows.length === 0) {
-      alert("No data to export");
+    if (reportItems.length === 0) {
+      alert('Add items to report first');
       return;
     }
 
     try {
       const pdf = new jsPDF({
-        orientation: 'portrait',
+        orientation: 'landscape',
         unit: 'mm',
         format: 'a4'
       });
 
-      let yPosition = 15;
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 10;
+      const margin = 15;
       const contentWidth = pageWidth - 2 * margin;
 
-      // Header
+      let yPosition = margin;
+
+      // ===== HEADER =====
       pdf.setFillColor(37, 99, 235); // blue-600
-      pdf.rect(margin, 8, contentWidth, 12, 'F');
+      pdf.rect(margin, yPosition, contentWidth, 18, 'F');
+      
       pdf.setTextColor(255, 255, 255);
       pdf.setFontSize(20);
       pdf.setFont(undefined, 'bold');
-      pdf.text('PULSE REPORT', margin + 5, 14);
-
-      pdf.setTextColor(100, 116, 139); // slate-500
+      pdf.text('INVOICE REPORT', margin + 5, yPosition + 12);
+      
+      pdf.setTextColor(219, 234, 254);
       pdf.setFontSize(8);
       pdf.setFont(undefined, 'normal');
-      pdf.text('Financial & Maintenance Summary', margin + 5, 19);
+      pdf.text(period === 'weekly' ? 'Weekly Report' : 'Monthly Report', margin + 5, yPosition + 16);
 
-      yPosition = 28;
+      yPosition += 26;
 
-      // Summary Info
-      pdf.setTextColor(71, 85, 105); // slate-700
-      pdf.setFont(undefined, 'bold');
+      // ===== PERIOD INFO =====
+      pdf.setTextColor(71, 85, 105);
       pdf.setFontSize(9);
-      
-      const summaryStartY = yPosition;
-      pdf.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, margin + 5, yPosition);
-      yPosition += 5;
-      
-      const periodText = rangeStart && rangeEnd 
-        ? `Period: ${new Date(rangeStart).toLocaleDateString('en-GB')} - ${new Date(rangeEnd).toLocaleDateString('en-GB')}`
-        : `Period: ${period.charAt(0).toUpperCase() + period.slice(1)}`;
-      pdf.text(periodText, margin + 5, yPosition);
-      yPosition += 8;
-
-      // Summary Stats Box
-      pdf.setFillColor(241, 245, 249); // slate-100
-      pdf.rect(margin, summaryStartY - 2, contentWidth, 18, 'F');
-      
-      pdf.setTextColor(100, 116, 139); // slate-500
       pdf.setFont(undefined, 'bold');
+      pdf.text(`Period: ${new Date(anchorDate).toLocaleDateString('en-GB')}`, margin, yPosition);
+      
       pdf.setFontSize(7);
-      pdf.text('TOTAL AMOUNT', margin + 5, summaryStartY + 3);
-      pdf.text('ITEMS COUNT', margin + 73, summaryStartY + 3);
-      pdf.text('BREAKDOWN', margin + 140, summaryStartY + 3);
+      pdf.setFont(undefined, 'normal');
+      pdf.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin - 40, yPosition);
 
-      pdf.setTextColor(15, 23, 42); // slate-900
+      yPosition += 12;
+
+      // ===== GRAND TOTAL BOX =====
+      pdf.setFillColor(59, 130, 246); // blue-500
+      pdf.rect(margin, yPosition, contentWidth, 16, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(8);
       pdf.setFont(undefined, 'bold');
-      pdf.setFontSize(12);
-      pdf.text(`R${totals.totalAmount.toFixed(0)}`, margin + 5, summaryStartY + 10);
-      pdf.text(String(rows.length), margin + 73, summaryStartY + 10);
-      pdf.text(`${totals.maintenanceCount}M • ${totals.invoiceCount}I`, margin + 140, summaryStartY + 10);
+      pdf.text('TOTAL REVENUE', margin + 5, yPosition + 5);
+      
+      pdf.setFontSize(18);
+      pdf.text(`R${totalAmount.toFixed(0)}`, margin + 5, yPosition + 13);
+      
+      pdf.setFontSize(7);
+      pdf.text(`${reportItems.length} Invoices`, pageWidth - margin - 40, yPosition + 13);
 
-      yPosition = summaryStartY + 20;
+      yPosition += 24;
 
-      // Table Header
-      const tableTop = yPosition;
-      const colWidths = [25, 20, 20, 50, 20, 25, 20];
-      const headers = ['Date', 'Type', 'Unit', 'Issue', 'Who', 'Amount', 'Status'];
+      // ===== TABLE STRUCTURE =====
+      const tableStartY = yPosition;
+      const rowHeight = 10;
+      const headerHeight = 8;
+      
+      // Column widths optimized: Job Done(80mm) > Unit(30mm) > Date/Type/Status(25mm) > Contractor(30mm) > Amount(32mm) > Invoice(20mm)
+      const columns = [
+        { x: margin, width: 20, label: 'Invoice' },
+        { x: margin + 20, width: 30, label: 'Unit' },
+        { x: margin + 50, width: 25, label: 'Date' },
+        { x: margin + 75, width: 30, label: 'Contractor' },
+        { x: margin + 105, width: 80, label: 'Job Done' },
+        { x: margin + 185, width: 25, label: 'Type' },
+        { x: margin + 210, width: 25, label: 'Status' },
+        { x: margin + 235, width: 32, label: 'Amount' }
+      ];
 
-      pdf.setFillColor(148, 163, 184); // slate-400
+      // ===== TABLE HEADER =====
+      pdf.setFillColor(71, 85, 105); // slate-600
+      pdf.rect(margin, yPosition, contentWidth, headerHeight, 'F');
+      
+      // Header borders
+      pdf.setDrawColor(51, 65, 85);
+      pdf.setLineWidth(0.3);
+      columns.forEach((col) => {
+        pdf.rect(col.x, yPosition, col.width, headerHeight);
+      });
+      
       pdf.setTextColor(255, 255, 255);
       pdf.setFont(undefined, 'bold');
       pdf.setFontSize(7);
-
-      const headerY = tableTop + 3;
-      let currentX = margin;
-      headers.forEach((header, idx) => {
-        pdf.text(header, currentX + 1, headerY);
-        currentX += colWidths[idx];
+      
+      columns.forEach((col) => {
+        pdf.text(col.label, col.x + 2, yPosition + 5.5);
       });
 
-      yPosition = tableTop + 7;
+      yPosition += headerHeight;
 
-      // Table Rows
-      pdf.setTextColor(71, 85, 105); // slate-700
-      pdf.setFont(undefined, 'normal');
-      pdf.setFontSize(7);
-
-      rows.forEach((row, idx) => {
-        if (yPosition > pageHeight - 15) {
+      // ===== TABLE ROWS =====
+      reportItems.forEach((item, idx) => {
+        if (yPosition > pageHeight - 25) {
           pdf.addPage();
-          yPosition = 15;
+          yPosition = margin;
+          
+          // Redraw header on new page
+          pdf.setFillColor(71, 85, 105);
+          pdf.rect(margin, yPosition, contentWidth, headerHeight, 'F');
+          pdf.setDrawColor(51, 65, 85);
+          columns.forEach((col) => {
+            pdf.rect(col.x, yPosition, col.width, headerHeight);
+          });
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFont(undefined, 'bold');
+          pdf.setFontSize(7);
+          columns.forEach((col) => {
+            pdf.text(col.label, col.x + 2, yPosition + 5.5);
+          });
+          yPosition += headerHeight;
         }
 
         // Alternating row background
         if (idx % 2 === 0) {
-          pdf.setFillColor(248, 250, 252); // slate-50
-          pdf.rect(margin, yPosition - 2, contentWidth, 5, 'F');
+          pdf.setFillColor(248, 250, 252);
+          pdf.rect(margin, yPosition, contentWidth, rowHeight, 'F');
         }
 
-        pdf.setTextColor(71, 85, 105);
-        currentX = margin;
-
-        const colData = [
-          row.dateValue ? row.dateValue.toLocaleDateString('en-GB') : 'N/A',
-          row.type,
-          row.unit,
-          row.issue.substring(0, 35),
-          row.who.substring(0, 15),
-          `R${Number(row.amount || 0).toFixed(0)}`,
-          row.status
-        ];
-
-        colData.forEach((data, idx) => {
-          pdf.text(data || '', currentX + 1, yPosition);
-          currentX += colWidths[idx];
+        // Cell borders
+        pdf.setDrawColor(226, 232, 240);
+        pdf.setLineWidth(0.2);
+        columns.forEach((col) => {
+          pdf.rect(col.x, yPosition, col.width, rowHeight);
         });
 
-        yPosition += 5;
+        pdf.setTextColor(71, 85, 105);
+        pdf.setFontSize(7);
+        pdf.setFont(undefined, 'normal');
+
+        // Row data - 2mm padding for spacing
+        pdf.text((item.invoiceNumber ? String(item.invoiceNumber) : '').substring(0, 8), columns[0].x + 2, yPosition + 6.5);
+        pdf.text((item.unit || '').substring(0, 18), columns[1].x + 2, yPosition + 6.5);
+        pdf.text(item.date ? new Date(item.date).toLocaleDateString('en-GB') : '', columns[2].x + 2, yPosition + 6.5);
+        
+        const contractor = (item.contractor || '').substring(0, 18);
+        pdf.text(contractor, columns[3].x + 2, yPosition + 6.5);
+        
+        // Job Done - 80mm width allows ~60 characters
+        const jobText = item.jobDone || '';
+        const truncatedJob = jobText.length > 60 ? jobText.substring(0, 57) + ' ...' : jobText;
+        pdf.text(truncatedJob, columns[4].x + 2, yPosition + 6.5);
+        
+        // Type (Internal/External)
+        const textColor = item.internal ? [34, 197, 94] : [220, 38, 38];
+        pdf.setTextColor(...textColor);
+        pdf.setFont(undefined, 'bold');
+        pdf.setFontSize(6.5);
+        pdf.text(item.internal ? 'Internal' : 'External', columns[5].x + 2, yPosition + 6.5);
+
+        pdf.setTextColor(71, 85, 105);
+        pdf.setFont(undefined, 'normal');
+        pdf.setFontSize(7);
+        pdf.text((item.status || '').substring(0, 14), columns[6].x + 2, yPosition + 6.5);
+
+        // Amount in blue
+        pdf.setTextColor(37, 99, 235);
+        pdf.setFont(undefined, 'bold');
+        pdf.text(`R${Number(item.amount || 0).toFixed(0)}`, columns[7].x + 2, yPosition + 6.5);
+
+        yPosition += rowHeight;
       });
 
-      // Footer
-      yPosition = pageHeight - 10;
-      pdf.setTextColor(100, 116, 139); // slate-500
+      // ===== FOOTER =====
+      yPosition = pageHeight - 8;
+      pdf.setTextColor(148, 163, 184);
       pdf.setFontSize(7);
       pdf.setFont(undefined, 'normal');
       pdf.text('OC PULSE™ • Property Management System', pageWidth / 2, yPosition, { align: 'center' });
 
-      // Save
-      const filename = `Pulse-Report-${new Date().toISOString().slice(0, 10)}.pdf`;
+      // Save PDF
+      const filename = `Pulse-Invoice-Report-${period}-${new Date().toISOString().slice(0, 10)}.pdf`;
       pdf.save(filename);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Error generating PDF. Please try again.');
+      alert('Error generating PDF');
+    }
+  };
+
+  // Preview PDF
+  const handlePreviewPDF = async () => {
+    if (reportItems.length === 0) {
+      alert('Add items to report first');
+      return;
+    }
+
+    try {
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pageWidth - 2 * margin;
+
+      let yPosition = margin;
+
+      pdf.setFillColor(37, 99, 235);
+      pdf.rect(margin, yPosition, contentWidth, 18, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(20);
+      pdf.setFont(undefined, 'bold');
+      pdf.text('INVOICE REPORT', margin + 5, yPosition + 12);
+      
+      pdf.setTextColor(219, 234, 254);
+      pdf.setFontSize(8);
+      pdf.setFont(undefined, 'normal');
+      pdf.text(period === 'weekly' ? 'Weekly Report' : 'Monthly Report', margin + 5, yPosition + 16);
+
+      yPosition += 26;
+
+      pdf.setTextColor(71, 85, 105);
+      pdf.setFontSize(9);
+      pdf.setFont(undefined, 'bold');
+      pdf.text(`Period: ${new Date(anchorDate).toLocaleDateString('en-GB')}`, margin, yPosition);
+      
+      pdf.setFontSize(7);
+      pdf.setFont(undefined, 'normal');
+      pdf.text(`Generated: ${new Date().toLocaleDateString('en-GB')}`, pageWidth - margin - 40, yPosition);
+
+      yPosition += 12;
+
+      pdf.setFillColor(59, 130, 246);
+      pdf.rect(margin, yPosition, contentWidth, 16, 'F');
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFontSize(8);
+      pdf.setFont(undefined, 'bold');
+      pdf.text('TOTAL REVENUE', margin + 5, yPosition + 5);
+      
+      pdf.setFontSize(18);
+      pdf.text(`R${totalAmount.toFixed(0)}`, margin + 5, yPosition + 13);
+      
+      pdf.setFontSize(7);
+      pdf.text(`${reportItems.length} Invoices`, pageWidth - margin - 40, yPosition + 13);
+
+      yPosition += 24;
+
+      // ===== TABLE STRUCTURE =====
+      const tableStartY = yPosition;
+      const rowHeight = 10;
+      const headerHeight = 8;
+      
+      // Column widths optimized: Job Done(80mm) > Unit(30mm) > Date/Type/Status(25mm) > Contractor(30mm) > Amount(32mm) > Invoice(20mm)
+      const columns = [
+        { x: margin, width: 20, label: 'Invoice' },
+        { x: margin + 20, width: 30, label: 'Unit' },
+        { x: margin + 50, width: 25, label: 'Date' },
+        { x: margin + 75, width: 30, label: 'Contractor' },
+        { x: margin + 105, width: 80, label: 'Job Done' },
+        { x: margin + 185, width: 25, label: 'Type' },
+        { x: margin + 210, width: 25, label: 'Status' },
+        { x: margin + 235, width: 32, label: 'Amount' }
+      ];
+
+      // ===== TABLE HEADER =====
+      pdf.setFillColor(71, 85, 105); // slate-600
+      pdf.rect(margin, yPosition, contentWidth, headerHeight, 'F');
+      
+      // Header borders
+      pdf.setDrawColor(51, 65, 85);
+      pdf.setLineWidth(0.3);
+      columns.forEach((col) => {
+        pdf.rect(col.x, yPosition, col.width, headerHeight);
+      });
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont(undefined, 'bold');
+      pdf.setFontSize(7);
+      
+      columns.forEach((col) => {
+        pdf.text(col.label, col.x + 2, yPosition + 5.5);
+      });
+
+      yPosition += headerHeight;
+
+      // ===== TABLE ROWS =====
+      reportItems.forEach((item, idx) => {
+        if (yPosition > pageHeight - 25) {
+          pdf.addPage();
+          yPosition = margin;
+          
+          // Redraw header on new page
+          pdf.setFillColor(71, 85, 105);
+          pdf.rect(margin, yPosition, contentWidth, headerHeight, 'F');
+          pdf.setDrawColor(51, 65, 85);
+          columns.forEach((col) => {
+            pdf.rect(col.x, yPosition, col.width, headerHeight);
+          });
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFont(undefined, 'bold');
+          pdf.setFontSize(7);
+          columns.forEach((col) => {
+            pdf.text(col.label, col.x + 2, yPosition + 5.5);
+          });
+          yPosition += headerHeight;
+        }
+
+        // Alternating row background
+        if (idx % 2 === 0) {
+          pdf.setFillColor(248, 250, 252);
+          pdf.rect(margin, yPosition, contentWidth, rowHeight, 'F');
+        }
+
+        // Cell borders
+        pdf.setDrawColor(226, 232, 240);
+        pdf.setLineWidth(0.2);
+        columns.forEach((col) => {
+          pdf.rect(col.x, yPosition, col.width, rowHeight);
+        });
+
+        pdf.setTextColor(71, 85, 105);
+        pdf.setFontSize(7);
+        pdf.setFont(undefined, 'normal');
+
+        // Row data - 2mm padding for spacing
+        pdf.text((item.invoiceNumber ? String(item.invoiceNumber) : '').substring(0, 8), columns[0].x + 2, yPosition + 6.5);
+        pdf.text((item.unit || '').substring(0, 18), columns[1].x + 2, yPosition + 6.5);
+        pdf.text(item.date ? new Date(item.date).toLocaleDateString('en-GB') : '', columns[2].x + 2, yPosition + 6.5);
+        
+        const contractor = (item.contractor || '').substring(0, 18);
+        pdf.text(contractor, columns[3].x + 2, yPosition + 6.5);
+        
+        // Job Done - 80mm width allows ~60 characters
+        const jobText = item.jobDone || '';
+        const truncatedJob = jobText.length > 60 ? jobText.substring(0, 57) + '...' : jobText;
+        pdf.text(truncatedJob, columns[4].x + 2, yPosition + 6.5);
+        
+        // Type (Internal/External)
+        const textColor = item.internal ? [34, 197, 94] : [220, 38, 38];
+        pdf.setTextColor(...textColor);
+        pdf.setFont(undefined, 'bold');
+        pdf.setFontSize(6.5);
+        pdf.text(item.internal ? 'Internal' : 'External', columns[5].x + 2, yPosition + 6.5);
+
+        pdf.setTextColor(71, 85, 105);
+        pdf.setFont(undefined, 'normal');
+        pdf.setFontSize(7);
+        pdf.text((item.status || '').substring(0, 14), columns[6].x + 2, yPosition + 6.5);
+
+        // Amount in blue
+        pdf.setTextColor(37, 99, 235);
+        pdf.setFont(undefined, 'bold');
+        pdf.text(`R${Number(item.amount || 0).toFixed(0)}`, columns[7].x + 2, yPosition + 6.5);
+
+        yPosition += rowHeight;
+      });
+
+      yPosition = pageHeight - 8;
+      pdf.setTextColor(148, 163, 184);
+      pdf.setFontSize(7);
+      pdf.setFont(undefined, 'normal');
+      pdf.text('OC PULSE™ • Property Management System', pageWidth / 2, yPosition, { align: 'center' });
+
+      const dataUrl = pdf.output('dataurlstring');
+      setPdfUrl(dataUrl);
+      setShowPdfViewer(true);
+    } catch (error) {
+      console.error('Error previewing PDF:', error);
+      alert('Error previewing PDF');
     }
   };
 
@@ -379,14 +530,14 @@ const ReportsPage = () => {
       <Sidebar isOpen={isOpen} setIsOpen={setIsOpen} />
 
       <main className={`transition-all duration-300 ${isOpen ? "md:ml-64" : "md:ml-20"} ml-0 p-4 md:p-8`}>
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-6 max-w-6xl mx-auto">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6 max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsOpen(!isOpen)} className="md:hidden bg-white p-3 rounded-xl shadow-sm text-slate-600 border border-slate-200">
               <FaBars size={20} />
             </button>
             <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Reports</h1>
-              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Weekly and monthly maintenance + invoices</p>
+              <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic leading-none">Invoice Reports</h1>
+              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Search & build monthly/weekly reports</p>
             </div>
           </div>
 
@@ -404,264 +555,223 @@ const ReportsPage = () => {
               <FaFilter className="text-slate-400" size={12} />
               <select
                 value={period}
-                onChange={(e) => {
-                  setPeriod(e.target.value);
-                  setRangeMode('auto');
-                }}
+                onChange={(e) => setPeriod(e.target.value)}
                 className="text-[10px] font-black uppercase text-slate-700 outline-none bg-transparent"
               >
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
               </select>
             </div>
-            <div className="bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2">
-              <FaFilter className="text-slate-400" size={12} />
-              <select
-                value={sourceFilter}
-                onChange={(e) => setSourceFilter(e.target.value)}
-                className="text-[10px] font-black uppercase text-slate-700 outline-none bg-transparent"
-              >
-                <option value="all">All</option>
-                <option value="maintenance">Maintenance</option>
-                <option value="invoice">Invoices</option>
-                <option value="manual">Manual</option>
-              </select>
-            </div>
-            <button onClick={() => setShowBuilder(true)} className="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center gap-2 shadow-sm">
-              <FaFilter size={12} /> Report Builder
-            </button>
-            <button onClick={handleExportPDF} className="bg-blue-600 text-white px-4 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center gap-2 shadow-lg hover:bg-blue-700 transition-colors">
-              <FaFilePdf size={12} /> Export PDF
-            </button>
           </div>
         </header>
 
-        <section className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 print:hidden">
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Total Amount</p>
-            <p className="text-2xl font-black text-slate-900 mt-2">R{totals.totalAmount.toFixed(0)}</p>
-          </div>
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Maintenance Jobs</p>
-            <p className="text-2xl font-black text-slate-900 mt-2">{totals.maintenanceCount}</p>
-          </div>
-          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Invoices</p>
-            <p className="text-2xl font-black text-slate-900 mt-2">{totals.invoiceCount}</p>
-          </div>
-        </section>
-
-        <div id="report-content" className="max-w-6xl mx-auto">
-          <section className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-3 md:items-center md:justify-between print:hidden">
-              <div className="relative w-full md:w-64">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* SEARCH SECTION */}
+          <div className="lg:col-span-1">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm sticky top-8">
+              <h2 className="text-lg font-black uppercase text-slate-900 mb-4">Search Invoices</h2>
+              
+              <div className="flex gap-2 mb-4">
                 <input
                   type="text"
-                  placeholder="Search unit, issue, who..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 pl-4 pr-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest outline-none focus:ring-2 ring-blue-500"
+                  placeholder="Invoice # or Unit..."
+                  value={searchInput}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="flex-1 bg-slate-100 px-4 py-2 rounded-xl text-[10px] font-bold outline-none border border-slate-200 focus:border-blue-500"
                 />
+                <button className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors">
+                  <FaSearch size={12} />
+                </button>
               </div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <FaTools /> Maintenance + <FaFileInvoice /> Invoices
-              </div>
-            </div>
 
-            <div className="overflow-x-auto">
-            <table className="w-full text-left text-[10px] font-bold uppercase">
-              <thead className="bg-slate-50 text-slate-400">
-                <tr>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Unit</th>
-                  <th className="px-4 py-3">Issue</th>
-                  <th className="px-4 py-3">Who</th>
-                  <th className="px-4 py-3">Amount</th>
-                  <th className="px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="text-slate-700">
-                {rows.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="px-4 py-8 text-center text-slate-400">
-                      No records for this period.
-                    </td>
-                  </tr>
-                ) : (
-                  rows.map((row) => (
-                    <tr key={row.id} className="border-t border-slate-100">
-                      <td className="px-4 py-3">
-                        {row.dateValue ? row.dateValue.toLocaleDateString('en-GB') : 'N/A'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-lg ${row.type === 'Maintenance' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
-                          {row.type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">{row.unit}</td>
-                      <td className="px-4 py-3 max-w-[240px] truncate">{row.issue}</td>
-                      <td className="px-4 py-3">{row.who}</td>
-                      <td className="px-4 py-3">
-                        {overridesEnabled ? (
-                          <input
-                            type="number"
-                            value={overrideAmounts[row.id] ?? row.amount ?? ''}
-                            onChange={(e) =>
-                              setOverrideAmounts((prev) => ({
-                                ...prev,
-                                [row.id]: e.target.value
-                              }))
-                            }
-                            className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-black text-slate-700"
-                          />
-                        ) : (
-                          `R${Number(row.amount || 0).toFixed(0)}`
-                        )}
-                      </td>
-                      <td className="px-4 py-3">{row.status}</td>
-                    </tr>
-                  ))
+              {/* Search Results */}
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {searchResults.length === 0 && searchInput && (
+                  <p className="text-[9px] text-slate-400 text-center py-4">No invoices found</p>
                 )}
-              </tbody>
-            </table>
-            </div>
-
-            {/* PDF Footer */}
-            <div className="bg-slate-50 px-8 py-6 border-t border-slate-200 text-center">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">OC PULSE™ • Property Management System</p>
-            </div>
-          </section>
-        </div>
-      </main>
-
-      {showBuilder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-xl rounded-[2rem] shadow-2xl overflow-hidden">
-            <div className="p-5 bg-slate-900 text-white flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-black uppercase tracking-tight">Report Builder</h2>
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Adjust range and add manual items</p>
+                
+                {searchResults.map((invoice) => (
+                  <div key={invoice.id} className="bg-slate-50 p-3 rounded-xl border border-slate-200 hover:border-blue-400 transition-all cursor-pointer group">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="text-[9px] font-black text-slate-900">#{invoice.invoiceNumber}</p>
+                        <p className="text-[8px] text-slate-500">{invoice.unit}</p>
+                      </div>
+                      <button
+                        onClick={() => addToReport(invoice)}
+                        className="bg-blue-600 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <FaPlus size={10} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <button onClick={() => setShowBuilder(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
+          </div>
 
-            <div className="p-5 space-y-5">
-              <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Date Range</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    type="date"
-                    value={rangeStart}
-                    onChange={(e) => {
-                      setRangeStart(e.target.value);
-                      setRangeMode('custom');
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase"
-                  />
-                  <input
-                    type="date"
-                    value={rangeEnd}
-                    onChange={(e) => {
-                      setRangeEnd(e.target.value);
-                      setRangeMode('custom');
-                    }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase"
-                  />
-                </div>
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => {
-                      setRangeMode('auto');
-                      setPeriod('weekly');
-                      setAutoRange(anchorDate, 'weekly');
-                    }}
-                    className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[9px] font-black uppercase"
-                  >
-                    This Week
-                  </button>
-                  <button
-                    onClick={() => {
-                      setRangeMode('auto');
-                      setPeriod('monthly');
-                      setAutoRange(anchorDate, 'monthly');
-                    }}
-                    className="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-[9px] font-black uppercase"
-                  >
-                    This Month
-                  </button>
-                </div>
+          {/* REPORT BUILDER SECTION */}
+          <div className="lg:col-span-2">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-black uppercase text-slate-900">Report Items ({reportItems.length})</h2>
+                <div className="text-2xl font-black text-blue-600">R{totalAmount.toFixed(0)}</div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Override Amounts</p>
-                  <p className="text-[10px] text-slate-500">Edit amounts directly in the table</p>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={overridesEnabled}
-                  onChange={(e) => setOverridesEnabled(e.target.checked)}
-                />
-              </div>
-
-              <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Manual Line Item</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <input
-                    type="date"
-                    value={manualDraft.date}
-                    onChange={(e) => setManualDraft((prev) => ({ ...prev, date: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Unit"
-                    value={manualDraft.unit}
-                    onChange={(e) => setManualDraft((prev) => ({ ...prev, unit: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Issue"
-                    value={manualDraft.issue}
-                    onChange={(e) => setManualDraft((prev) => ({ ...prev, issue: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Who did it"
-                    value={manualDraft.who}
-                    onChange={(e) => setManualDraft((prev) => ({ ...prev, who: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Amount"
-                    value={manualDraft.amount}
-                    onChange={(e) => setManualDraft((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-black uppercase"
-                  />
-                  <button
-                    onClick={handleAddManualItem}
-                    className="bg-slate-900 text-white px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest"
-                  >
-                    Add Item
-                  </button>
-                </div>
-
-                {manualItems.length > 0 && (
-                  <div className="mt-4 space-y-2">
-                    {manualItems.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] font-bold">
-                        <span>{item.date} · {item.unit} · {item.issue} · {item.who} · R{item.amount}</span>
-                        <button onClick={() => handleRemoveManualItem(item.id)} className="text-slate-400 hover:text-red-500">Remove</button>
+              {reportItems.length === 0 ? (
+                <p className="text-[9px] text-slate-400 text-center py-8">Search and add invoices to build your report</p>
+              ) : (
+                <>
+                  <div className="space-y-3 mb-6">
+                    {reportItems.map((item) => (
+                      <div key={item.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        {editingId === item.id ? (
+                          // EDIT MODE
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <input
+                                type="text"
+                                value={editingData.invoiceNumber}
+                                onChange={(e) => setEditingData({...editingData, invoiceNumber: e.target.value})}
+                                placeholder="Invoice No"
+                                className="bg-white px-3 py-2 rounded-lg text-[10px] border border-slate-200 outline-none focus:border-blue-500"
+                              />
+                              <input
+                                type="text"
+                                value={editingData.unit}
+                                onChange={(e) => setEditingData({...editingData, unit: e.target.value})}
+                                placeholder="Unit"
+                                className="bg-white px-3 py-2 rounded-lg text-[10px] border border-slate-200 outline-none focus:border-blue-500"
+                              />
+                              <input
+                                type="date"
+                                value={editingData.date}
+                                onChange={(e) => setEditingData({...editingData, date: e.target.value})}
+                                className="bg-white px-3 py-2 rounded-lg text-[10px] border border-slate-200 outline-none focus:border-blue-500"
+                              />
+                              <input
+                                type="text"
+                                value={editingData.contractor}
+                                onChange={(e) => setEditingData({...editingData, contractor: e.target.value})}
+                                placeholder="Contractor"
+                                className="bg-white px-3 py-2 rounded-lg text-[10px] border border-slate-200 outline-none focus:border-blue-500"
+                              />
+                              <input
+                                type="text"
+                                value={editingData.jobDone || ''}
+                                onChange={(e) => setEditingData({...editingData, jobDone: e.target.value})}
+                                placeholder="Job Done"
+                                className="bg-white px-3 py-2 rounded-lg text-[10px] border border-slate-200 outline-none focus:border-blue-500 col-span-2"
+                              />
+                              <input
+                                type="number"
+                                value={editingData.amount}
+                                onChange={(e) => setEditingData({...editingData, amount: Number(e.target.value)})}
+                                placeholder="Amount"
+                                className="bg-white px-3 py-2 rounded-lg text-[10px] border border-slate-200 outline-none focus:border-blue-500"
+                              />
+                              <select
+                                value={editingData.internal ? 'internal' : 'external'}
+                                onChange={(e) => setEditingData({...editingData, internal: e.target.value === 'internal'})}
+                                className="bg-white px-3 py-2 rounded-lg text-[10px] border border-slate-200 outline-none focus:border-blue-500"
+                              >
+                                <option value="internal">Internal</option>
+                                <option value="external">External</option>
+                              </select>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={saveEdit}
+                                className="flex-1 bg-green-600 text-white px-3 py-2 rounded-lg text-[10px] font-bold hover:bg-green-700 transition-colors"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingId(null)}
+                                className="flex-1 bg-slate-400 text-white px-3 py-2 rounded-lg text-[10px] font-bold hover:bg-slate-500 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          // VIEW MODE
+                          <div>
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="text-[10px] font-black text-slate-900">#{item.invoiceNumber}</p>
+                                <p className="text-[9px] text-slate-600">{item.unit} • {item.date}</p>
+                                <p className="text-[8px] text-slate-500 mt-1">{item.contractor}</p>
+                                <p className="text-[8px] text-slate-400 mt-1 italic">{item.jobDone}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-black text-blue-600">R{Number(item.amount || 0).toFixed(0)}</p>
+                                <span className={`text-[8px] font-bold px-2 py-1 rounded ${item.internal ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  {item.internal ? 'Internal' : 'External'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                              <button
+                                onClick={() => startEdit(item.id)}
+                                className="flex-1 bg-blue-600 text-white px-3 py-1 rounded-lg text-[9px] font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
+                              >
+                                <FaEdit size={10} /> Edit
+                              </button>
+                              <button
+                                onClick={() => removeFromReport(item.id)}
+                                className="flex-1 bg-red-600 text-white px-3 py-1 rounded-lg text-[9px] font-bold hover:bg-red-700 transition-colors flex items-center justify-center gap-1"
+                              >
+                                <FaTrash size={10} /> Remove
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handlePreviewPDF}
+                      className="flex-1 bg-blue-600 text-white px-4 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors"
+                    >
+                      <FaEye size={14} /> Preview
+                    </button>
+                    <button
+                      onClick={handleExportPDF}
+                      className="flex-1 bg-green-600 text-white px-4 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:bg-green-700 transition-colors"
+                    >
+                      <FaFilePdf size={14} /> Download
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
+          </div>
+        </div>
+      </main>
+
+      {/* PDF VIEWER MODAL */}
+      {showPdfViewer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-96 overflow-hidden">
+            <div className="flex justify-between items-center bg-slate-900 text-white p-4">
+              <h3 className="font-black uppercase text-sm">PDF Preview</h3>
+              <button
+                onClick={() => setShowPdfViewer(false)}
+                className="hover:bg-slate-800 p-2 rounded transition-colors"
+              >
+                <FaTimes size={18} />
+              </button>
+            </div>
+            {pdfUrl && (
+              <iframe
+                src={pdfUrl}
+                className="w-full h-80"
+                style={{ border: 'none' }}
+              />
+            )}
           </div>
         </div>
       )}
