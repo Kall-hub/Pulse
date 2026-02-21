@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import SuccessToast from '../components/SuccessToast';
+import ApartmentAutocomplete from '../components/ApartmentAutocomplete';
 import { 
   FaPlus, FaTrash, FaFileInvoice, FaPercent, 
   FaCalculator, FaCheckCircle, FaSearch,
@@ -348,12 +349,13 @@ const InvoicingPage = () => {
                 <section className="bg-white p-6 rounded-4xl border border-slate-200 shadow-sm">
                     <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-slate-900 text-white rounded-xl flex items-center justify-center shrink-0"><BiBuildings size={20} /></div>
-                        <input 
-                            placeholder="UNIT REF (e.g. DUNCAN A612)" 
-                            className="w-full bg-slate-50 p-4 rounded-2xl text-sm font-black uppercase outline-none focus:ring-2 ring-blue-500 transition-all placeholder:text-slate-300"
-                            value={unit}
-                            onChange={(e) => setUnit(e.target.value.toUpperCase())}
-                        />
+                        <div className="flex-1">
+                            <ApartmentAutocomplete 
+                                value={unit}
+                                onChange={setUnit}
+                                placeholder="UNIT REF (e.g. DUNCAN A612)"
+                            />
+                        </div>
                     </div>
                 </section>
 

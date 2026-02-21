@@ -1,9 +1,12 @@
 "use client";
 import { useState } from 'react';
 import { FaTimes, FaPlus, FaTrash, FaCheck } from "react-icons/fa";
+import ApartmentAutocomplete from './ApartmentAutocomplete';
+import VehicleSelector from './VehicleSelector';
 
 const MaintenanceForm = ({ isOpen, onClose, onSubmit }) => {
   const [unit, setUnit] = useState('');
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
   
   // Staging Area (What is currently being typed)
   const [currentArea, setCurrentArea] = useState('General');
@@ -44,13 +47,14 @@ const MaintenanceForm = ({ isOpen, onClose, onSubmit }) => {
         return;
     }
 
-    // Send the whole package
-    onSubmit({ unit, faults: faultList });
+    // Send the whole package INCLUDING vehicle assignment
+    onSubmit({ unit, faults: faultList, vehicle: selectedVehicle });
     
     // Reset Everything
     setUnit('');
     setFaultList([]);
     setCurrentNote('');
+    setSelectedVehicle(null);
   };
 
   if (!isOpen) return null;
@@ -73,17 +77,14 @@ const MaintenanceForm = ({ isOpen, onClose, onSubmit }) => {
           {/* SCROLLABLE CONTENT */}
           <div className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
              
-             {/* 1. UNIT INPUT */}
+             {/* 1. UNIT INPUT WITH AUTOCOMPLETE */}
              <div className="space-y-2">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Apartment / Unit</p>
-                <input 
-                  required 
-                  autoFocus
-                  type="text" 
-                  placeholder="e.g. HILLCREST 204"
+                <ApartmentAutocomplete 
                   value={unit}
-                  onChange={(e) => setUnit(e.target.value.toUpperCase())}
-                  className="w-full bg-slate-800 text-white p-5 rounded-2xl text-sm font-black uppercase outline-none focus:ring-2 focus:ring-blue-500 border border-slate-700"
+                  onChange={setUnit}
+                  placeholder="e.g. HILLCREST 204"
+                  autoFocus={true}
                 />
              </div>
 
@@ -145,7 +146,13 @@ const MaintenanceForm = ({ isOpen, onClose, onSubmit }) => {
                 )}
              </div>
 
-             {/* 3. SUBMIT BUTTON */}
+             {/* 3. VEHICLE ASSIGNMENT */}
+             <VehicleSelector 
+               selectedVehicle={selectedVehicle}
+               onChange={setSelectedVehicle}
+             />
+
+             {/* 4. SUBMIT BUTTON */}
              <button 
                 onClick={handleSubmit}
                 disabled={faultList.length === 0 || !unit}

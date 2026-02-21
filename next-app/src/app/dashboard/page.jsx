@@ -9,6 +9,7 @@ import {
 } from "react-icons/fa";
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../Config/firebaseConfig';
+import pulseBrain from '../Config/PulseBrain';
 
 const DashboardPage = () => {
   const [isOpen, setIsOpen] = useState(true);
@@ -82,8 +83,8 @@ const DashboardPage = () => {
 
   const totalBuildings = buildings.length;
   const totalUnits = buildings.reduce((sum, b) => sum + b.units.length, 0);
-  const flatsCount = buildings.filter(b => b.type === 'Flat').reduce((sum, b) => sum + b.units.length, 0);
-  const communesCount = buildings.filter(b => b.type === 'Commune').reduce((sum, b) => sum + b.units.length, 0);
+  const flatsCount = buildings.filter(b => b.type === 'Flat').length;
+  const communesCount = buildings.filter(b => b.type === 'Commune').length;
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-900 font-sans">

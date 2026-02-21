@@ -9,6 +9,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const PulseyBot = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [contextualMessage, setContextualMessage] = useState(null);
+  const [contextualAction, setContextualAction] = useState(null);
   const [messages, setMessages] = useState([
     { role: 'bot', text: "Hi there! 👋 I'm Pulsey-Bot, your property management assistant. How can I help you today?" }
   ]);
@@ -25,6 +27,27 @@ const PulseyBot = () => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // --- PULSE AWARENESS INTEGRATION ---
+  useEffect(() => {
+    // Listen for contextual bot updates from PulseBrain
+    window.updatePulseyBotMessage = (message, action) => {
+      setContextualMessage(message);
+      setContextualAction(action);
+      
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        setContextualMessage(null);
+        setContextualAction(null);
+      }, 5000);
+    };
+
+    return () => {
+      if (window.updatePulseyBotMessage) {
+        delete window.updatePulseyBotMessage;
+      }
+    };
+  }, []);
 
   // --- DRAG HANDLERS ---
   const handleMouseDown = (e) => {
@@ -294,6 +317,20 @@ INSTRUCTIONS:
 
             <div className="bg-[#0F172A]/95 backdrop-blur-2xl w-[320px] h-[450px] rounded-[2rem] border border-white/10 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 origin-bottom-right">
             
+            {/* CONTEXTUAL MESSAGE NOTIFICATION */}
+            {contextualMessage && (
+              <div className={`px-4 py-3 text-center text-[8px] font-black uppercase tracking-widest animate-in fade-in border-b border-white/5 ${
+                contextualAction === 'unit-selected' ? 'bg-blue-600/20 text-blue-300' :
+                contextualAction === 'inspection-created' ? 'bg-orange-600/20 text-orange-300' :
+                contextualAction === 'maintenance-logged' ? 'bg-red-600/20 text-red-300' :
+                contextualAction === 'cleaning-booked' ? 'bg-green-600/20 text-green-300' :
+                contextualAction === 'invoice-created' ? 'bg-purple-600/20 text-purple-300' :
+                'bg-slate-600/20 text-slate-300'
+              }`}>
+                ✨ {contextualMessage}
+              </div>
+            )}
+
             {/* HEADER */}
             <div className="p-4 bg-blue-700/50 flex items-center justify-center shrink-0 border-b border-white/5">
                 <div className="flex items-center space-x-2">

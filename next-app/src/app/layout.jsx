@@ -1,5 +1,5 @@
 import { Geist, Geist_Mono } from "next/font/google";
-import PulseyBot from "./components/PulseyBot";
+import PulseCheckInSmart from "./components/PulseCheckInSmart";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -22,7 +22,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <div className="print:hidden">
-          <PulseyBot />
+          <PulseCheckInSmart />
         </div>
         {children}
       </body>

@@ -5,6 +5,8 @@ import { collection, getDocs, addDoc, updateDoc, doc, deleteDoc } from 'firebase
 import { onAuthStateChanged } from 'firebase/auth';
 import { getDoc } from 'firebase/firestore';
 import { db, auth } from '../Config/firebaseConfig';
+import ApartmentAutocomplete from '../components/ApartmentAutocomplete';
+import VehicleSelector from '../components/VehicleSelector';
 import { 
   FaSoap, FaPlus, FaUserAlt, FaTimes, FaCheck, FaTrash, 
   FaGhost, FaChevronDown, FaBroom, FaSprayCan, FaHandSparkles,
@@ -102,14 +104,14 @@ const CleaningPage = () => {
     fetchCleanings();
   }, []);
 
-  const [formData, setFormData] = useState({ unit: '', cleaner: 'Lindiwe', serviceDate: '', time: '', selectedZones: [] });
+  const [formData, setFormData] = useState({ unit: '', cleaner: 'Lindiwe', serviceDate: '', time: '', selectedZones: [], vehicle: null });
   const cleaners = ["Lindiwe", "Sarah", "Thembi", "Precious"];
 
   // --- ACTIONS ---
   const handleSave = async (e) => {
     e.preventDefault();
     if (formData.selectedZones.length === 0) return alert("Please select at least one zone.");
-    const payload = { ...formData, unit: formData.unit.toUpperCase(), zones: formData.selectedZones };
+    const payload = { ...formData, unit: formData.unit.toUpperCase(), zones: formData.selectedZones, vehicle: formData.vehicle };
 
     try {
       if (editingId) {
@@ -280,7 +282,7 @@ const CleaningPage = () => {
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setFormData({ unit: '', cleaner: 'Lindiwe', serviceDate: '', time: '', selectedZones: [] });
+    setFormData({ unit: '', cleaner: 'Lindiwe', serviceDate: '', time: '', selectedZones: [], vehicle: null });
   };
 
   const filteredJobs = jobs.filter(j => filter === 'ongoing' ? j.status !== 'Completed' : j.status === 'Completed');
@@ -359,7 +361,11 @@ const CleaningPage = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Unit</label>
-                    <input required placeholder="A612" className="w-full bg-slate-100 p-4 rounded-2xl font-black uppercase text-xs outline-none focus:ring-2 ring-blue-600" value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} />
+                    <ApartmentAutocomplete 
+                      value={formData.unit} 
+                      onChange={unit => setFormData({...formData, unit})}
+                      placeholder="A612"
+                    />
                   </div>
                   <div className="space-y-1">
                     <label className="text-[9px] font-black uppercase text-slate-400 ml-2">Housekeeper</label>
@@ -377,6 +383,12 @@ const CleaningPage = () => {
               </div>
 
               <div className="border-t border-slate-100 pt-2"></div>
+
+              {/* VEHICLE ASSIGNMENT */}
+              <VehicleSelector 
+                selectedVehicle={formData.vehicle}
+                onChange={vehicle => setFormData({...formData, vehicle})}
+              />
 
               {/* AREA SELECTION */}
               <div>

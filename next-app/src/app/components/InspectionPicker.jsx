@@ -4,10 +4,13 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../Config/firebaseConfig';
 import { FaTimes, FaCheck, FaCalendarAlt, FaClock, FaUserTie } from "react-icons/fa";
+import ApartmentAutocomplete from './ApartmentAutocomplete';
+import VehicleSelector from './VehicleSelector';
 
 const InspectionPicker = ({ isOpen, onClose, onSubmit }) => {
   const [unitName, setUnitName] = useState('');
   const [selectedRooms, setSelectedRooms] = useState([]);
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
   const [userData, setUserData] = useState({ firstName: 'Inspector', lastName: '' });
   
   // NEW FIELDS
@@ -43,13 +46,14 @@ const InspectionPicker = ({ isOpen, onClose, onSubmit }) => {
         alert("Please complete all scheduling details (Unit, Rooms, Date, Time).");
         return;
     }
-    // Pass all data back
+    // Pass all data back INCLUDING vehicle
     onSubmit({
         unit: unitName,
         rooms: selectedRooms,
         date,
         time,
-        inspector
+        inspector,
+        vehicle: selectedVehicle
     });
     
     // Reset Form
@@ -58,6 +62,7 @@ const InspectionPicker = ({ isOpen, onClose, onSubmit }) => {
     setDate('');
     setTime('');
     setInspector(inspectorName);
+    setSelectedVehicle(null);
   };
 
   if (!isOpen) return null;
@@ -80,15 +85,14 @@ const InspectionPicker = ({ isOpen, onClose, onSubmit }) => {
         {/* BODY */}
         <div className="p-8 flex-1 overflow-y-auto custom-scrollbar space-y-8">
             
-            {/* 1. UNIT INPUT */}
+            {/* 1. UNIT INPUT WITH AUTOCOMPLETE */}
             <div className="space-y-2">
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Target Unit</p>
-                <input 
-                    autoFocus 
-                    placeholder="E.G. HILLCREST A612" 
-                    className="w-full bg-slate-50 border border-slate-100 p-5 rounded-2xl font-black uppercase outline-none focus:ring-2 ring-blue-600 text-slate-900 placeholder:text-slate-300" 
-                    value={unitName} 
-                    onChange={e => setUnitName(e.target.value.toUpperCase())} 
+                <ApartmentAutocomplete 
+                    value={unitName}
+                    onChange={setUnitName}
+                    placeholder="E.G. HILLCREST A612"
+                    autoFocus={true}
                 />
             </div>
 
@@ -129,7 +133,13 @@ const InspectionPicker = ({ isOpen, onClose, onSubmit }) => {
                 </div>
             </div>
 
-            {/* SUBMIT */}
+            {/* 4. VEHICLE ASSIGNMENT */}
+            <VehicleSelector 
+              selectedVehicle={selectedVehicle}
+              onChange={setSelectedVehicle}
+            />
+
+            {/* 5. SUBMIT */}
             <button onClick={handleBooking} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 shadow-xl shadow-blue-500/10 flex items-center justify-center gap-2 hover:bg-blue-600 transition-all">
                 <FaCheck /> Confirm Booking
             </button>

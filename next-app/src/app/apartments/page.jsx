@@ -156,6 +156,36 @@ const ApartmentsPage = () => {
           </div>
         </header>
 
+        {/* SUMMARY OVERVIEW */}
+        {currentData.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 md:mb-8">
+            <SummaryCard 
+              label={activeTab} 
+              value={currentData.length} 
+              subtext="Buildings"
+              color="bg-blue-50 text-blue-600"
+            />
+            <SummaryCard 
+              label="Total Units" 
+              value={currentData.reduce((sum, b) => sum + b.units.length, 0)}
+              subtext="Across all"
+              color="bg-slate-50 text-slate-600"
+            />
+            <SummaryCard 
+              label="Occupied" 
+              value={currentData.reduce((sum, b) => sum + b.occupied, 0)}
+              subtext="Units"
+              color="bg-green-50 text-green-600"
+            />
+            <SummaryCard 
+              label="Available" 
+              value={currentData.reduce((sum, b) => sum + (b.units.length - b.occupied), 0)}
+              subtext="Units"
+              color="bg-orange-50 text-orange-600"
+            />
+          </div>
+        )}
+
         {/* COMPACT SEARCH */}
         <div className="flex space-x-3 mb-6 md:mb-8">
           <div className="flex-1 relative">
@@ -229,6 +259,23 @@ const CompactPropertyCard = ({ name, total, occupied, health }) => {
           style={{ width: `${percentage}%` }}
         ></div>
       </div>
+    </div>
+  );
+};
+
+/* SUMMARY CARD - Displays overview metrics */
+const SummaryCard = ({ label, value, subtext, color }) => {
+  return (
+    <div className={`${color.split(' ')[0]} rounded-2xl p-4 shadow-sm border border-slate-100`}>
+      <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1">
+        {label}
+      </p>
+      <p className={`text-3xl font-black tracking-tighter ${color.split(' ')[1]}`}>
+        {value}
+      </p>
+      <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter mt-1">
+        {subtext}
+      </p>
     </div>
   );
 };

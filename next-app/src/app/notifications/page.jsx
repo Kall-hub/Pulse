@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar'; 
 import { FaCheckDouble } from "react-icons/fa";
 import { BiGhost } from "react-icons/bi";
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../Config/firebaseConfig';
 
 // IMPORT YOUR NEW CLEAN COMPONENTS
 import PulseLoader from '../components/PulseLoader';
@@ -14,51 +16,175 @@ const NotificationsPage = () => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); 
   const [selectedNotif, setSelectedNotif] = useState(null);
+  const [notifications, setNotifications] = useState([]);
 
-  // MOCK DATA (You will replace this with Supabase Fetch later)
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      type: "SCHEDULE_OVERRIDE",
-      title: "Viewing Schedule Update",
-      message: "Viewing for Unit A402 confirmed at 14:00. Note: Falls within standard travel buffer for the maintenance team. Tenant has been notified via SMS.",
-      time: "10 mins ago",
-      priority: "Normal",
-      read: false
-    },
-    {
-      id: 2,
-      type: "JOB_DONE",
-      title: "Maintenance Completed",
-      message: "Unit B12: Kitchen Sink repair marked as complete by Lindiwe. Verification pending. Please review the attached photos in the unit log to authorize vendor payment.",
-      time: "45 mins ago",
-      priority: "Normal",
-      read: true
-    },
-    {
-      id: 3,
-      type: "URGENT_MAINTENANCE",
-      title: "Urgent: Water Leak Reported",
-      message: "Unit C09: Tenant reported burst pipe. Automatic alert sent to plumbing vendor (Rasta). Water main shutoff instructed via Pulse Chatbot. Immediate site visit required to assess floor damage.",
-      time: "2 hours ago",
-      priority: "Critical",
-      read: false
-    },
-    {
-      id: 4,
-      type: "SYSTEM",
-      title: "Lease Renewal Reminder",
-      message: "Unit 404 lease expiring in 60 days. Renewal notice queued for dispatch. System recommendation: Review current market rates for Pretoria Hatfield area before confirming R7k rental price.",
-      time: "5 hours ago",
-      priority: "Normal",
-      read: true
-    }
-  ]);
-
-  // Simulate "Cooking" Effect
+  // Fetch real data from Firebase
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 1500); 
-    return () => clearTimeout(timer);
+    const fetchNotifications = async () => {
+      try {
+        const [maintenanceSnap, cleaningsSnap, inspectionsSnap, invoicesSnap, buildingsSnap] = await Promise.all([
+          getDocs(collection(db, 'maintenance')),
+          getDocs(collection(db, 'cleanings')),
+          getDocs(collection(db, 'inspections')),
+          getDocs(collection(db, 'invoices')),
+          getDocs(collection(db, 'buildings'))
+        ]);
+
+        const maintenance = maintenanceSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const cleanings = cleaningsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const inspections = inspectionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const invoices = invoicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const buildings = buildingsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Create building name map
+        const buildingMap = {};
+        buildings.forEach(b => {
+          if (b.units && Array.isArray(b.units)) {
+            b.units.forEach(unit => {
+              buildingMap[unit] = b.name;
+            });
+          }
+        });
+
+        const generatedNotifications = [];
+        let notifId = 1;
+
+        // Add maintenance notifications
+        maintenance.forEach(m => {
+          if (m.status === 'completed') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'JOB_DONE',
+              title: 'Maintenance Completed',
+              message: `Unit ${buildingMap[m.apartment] || m.apartment} ${m.apartment}: "${m.title || 'Maintenance task'}" marked as complete. Status verified. Ready for final inspection.`,
+              time: new Date(m.createdAt?.seconds * 1000).toLocaleDateString(),
+              priority: 'Normal',
+              read: false
+            });
+          } else if (m.status === 'in-progress') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'JOB_ACTIVE',
+              title: 'Maintenance In Progress',
+              message: `Unit ${buildingMap[m.apartment] || m.apartment} ${m.apartment}: "${m.title || 'Maintenance task'}" is currently being addressed. Estimated completion: ${m.dueDate || 'TBD'}`,
+              time: 'In Progress',
+              priority: 'Normal',
+              read: false
+            });
+          } else if (m.status === 'not-started') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'URGENT_MAINTENANCE',
+              title: 'Pending Maintenance',
+              message: `Unit ${buildingMap[m.apartment] || m.apartment} ${m.apartment}: "${m.title || 'Maintenance task'}" requires attention. Priority level: ${m.priority || 'Normal'}.`,
+              time: 'Pending',
+              priority: m.priority === 'High' ? 'Critical' : 'Normal',
+              read: false
+            });
+          }
+        });
+
+        // Add inspection notifications
+        inspections.forEach(i => {
+          if (i.status === 'completed') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'INSPECTION_DONE',
+              title: 'Inspection Completed',
+              message: `Unit ${buildingMap[i.apartment] || i.apartment} ${i.apartment}: Inspection conducted by ${i.inspector || 'Inspector'}. Rooms inspected: ${i.selectedRooms?.join(', ') || 'General'}. All findings documented.`,
+              time: new Date(i.createdAt?.seconds * 1000).toLocaleDateString(),
+              priority: 'Normal',
+              read: false
+            });
+          } else if (i.status !== 'completed') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'SCHEDULE_OVERRIDE',
+              title: 'Inspection Scheduled',
+              message: `Unit ${buildingMap[i.apartment] || i.apartment} ${i.apartment}: Inspection booked for ${i.date || 'TBD'} at ${i.time || 'TBD'}. Inspector: ${i.inspector || 'TBD'}.`,
+              time: 'Upcoming',
+              priority: 'Normal',
+              read: false
+            });
+          }
+        });
+
+        // Add cleaning notifications
+        cleanings.forEach(c => {
+          if (c.status === 'Completed') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'CLEANING_DONE',
+              title: 'Cleaning Completed',
+              message: `Unit ${buildingMap[c.apartment] || c.apartment} ${c.apartment}: Cleaning completed by ${c.cleaner || 'Cleaner'}. Service level: ${c.level || 'Standard'}. Quality verified.`,
+              time: new Date(c.createdAt?.seconds * 1000).toLocaleDateString(),
+              priority: 'Normal',
+              read: false
+            });
+          } else if (c.status === 'Booked') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'CLEANING_SCHEDULED',
+              title: 'Cleaning Booked',
+              message: `Unit ${buildingMap[c.apartment] || c.apartment} ${c.apartment}: Cleaning scheduled for ${c.serviceDate || 'TBD'} at ${c.time || 'TBD'}. Assigned to: ${c.cleaner || 'TBD'}.`,
+              time: 'Upcoming',
+              priority: 'Normal',
+              read: false
+            });
+          }
+        });
+
+        // Add invoice notifications
+        invoices.forEach(inv => {
+          if (inv.status === 'Paid') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'PAYMENT_RECEIVED',
+              title: 'Invoice Paid',
+              message: `Invoice #${inv.invoiceNumber || 'N/A'} for ${inv.unit || 'Service'}: Payment received (R${inv.totalAmount || '0'}). Funds cleared and recorded.`,
+              time: new Date(inv.createdAt?.seconds * 1000).toLocaleDateString(),
+              priority: 'Normal',
+              read: false
+            });
+          } else if (inv.status === 'Sent') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'INVOICE_SENT',
+              title: 'Invoice Sent',
+              message: `Invoice #${inv.invoiceNumber || 'N/A'} for ${inv.unit || 'Service'}: Amount R${inv.totalAmount || '0'} sent to client. Payment due by ${inv.dueDate || 'TBD'}.`,
+              time: 'Awaiting Payment',
+              priority: 'Normal',
+              read: false
+            });
+          } else if (inv.status === 'Draft') {
+            generatedNotifications.push({
+              id: notifId++,
+              type: 'DRAFT_INVOICE',
+              title: 'Invoice Pending Review',
+              message: `Invoice #${inv.invoiceNumber || 'N/A'} draft for ${inv.unit || 'Service'}: Amount R${inv.totalAmount || '0'}. Awaiting final review and dispatch.`,
+              time: 'Draft',
+              priority: 'Normal',
+              read: false
+            });
+          }
+        });
+
+        // Sort by recency (newest first)
+        generatedNotifications.sort((a, b) => {
+          const timeA = new Date(a.time).getTime() || 0;
+          const timeB = new Date(b.time).getTime() || 0;
+          return timeB - timeA;
+        });
+
+        setNotifications(generatedNotifications);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+        setLoading(false);
+      }
+    };
+
+    fetchNotifications();
   }, []);
 
   const markAllRead = () => setNotifications(notifications.map(n => ({ ...n, read: true })));
@@ -77,7 +203,7 @@ const NotificationsPage = () => {
   const filteredNotifications = notifications.filter(n => {
     if (filter === 'unread') return !n.read;
     if (filter === 'urgent') return n.priority === 'High' || n.priority === 'Critical';
-    if (filter === 'system') return n.type === 'SYSTEM' || n.type === 'SCHEDULE_OVERRIDE';
+    if (filter === 'system') return ['MAINTENANCE', 'INSPECTION', 'CLEANING', 'INVOICE'].some(type => n.type.includes(type));
     return true;
   });
 
