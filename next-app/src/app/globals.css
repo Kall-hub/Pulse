@@ -5,8 +5,17 @@
     padding: 0;
     margin: 0;
     box-sizing: border-box;
-    * { -ms-overflow-style: none; scrollbar-width: none; } *::-webkit-scrollbar { display: none; }
   }
+}
+
+/* Hide scrollbars app-wide (scroll still works) */
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
 }
 
 /* Report PDF styling */
@@ -18,4 +27,17 @@
   .hidden-on-screen {
     display: block;
   }
+}
+
+.glass-flash {
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-flash::before {
+  content: none;
+}
+
+.glass-flash::after {
+  content: none;
 }
