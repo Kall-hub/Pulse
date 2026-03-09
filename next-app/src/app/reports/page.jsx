@@ -39,6 +39,11 @@ const money = new Intl.NumberFormat("en-ZA", {
   maximumFractionDigits: 2
 });
 
+const VAT_RATE = 0.15;
+const VAT_DIVISOR = 1 + VAT_RATE;
+
+const exVat = (value) => Number(value || 0) / VAT_DIVISOR;
+
 const monthKey = (dateValue) => {
   const d = new Date(dateValue);
   if (Number.isNaN(d.getTime())) return "Unknown";
@@ -56,6 +61,10 @@ const toISODate = (value) => {
   const d = toDate(value);
   return d ? d.toISOString().slice(0, 10) : "";
 };
+
+const amountExVat = (item) => exVat(item?.amount);
+const costExVat = (item) => exVat(item?.cost);
+const profitExVat = (item) => amountExVat(item) - costExVat(item);
 
 const startOfWeek = (dateValue) => {
   const d = new Date(dateValue);
@@ -159,6 +168,7 @@ const ReportsPage = () => {
 
   const [pdfUrl, setPdfUrl] = useState(null);
   const [showPdfViewer, setShowPdfViewer] = useState(false);
+  const [pdfPreviewMode, setPdfPreviewMode] = useState("weekly");
 
   useEffect(() => {
     const handleResize = () => {
@@ -456,25 +466,25 @@ const ReportsPage = () => {
   }, [reportItems, rangeFrom, rangeTo]);
 
   const totals = useMemo(() => {
-    const revenue = periodReportItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-    const costs = periodReportItems.reduce((sum, item) => sum + Number(item.cost || 0), 0);
+    const revenue = periodReportItems.reduce((sum, item) => sum + amountExVat(item), 0);
+    const costs = periodReportItems.reduce((sum, item) => sum + costExVat(item), 0);
     const profit = revenue - costs;
 
     const internalRevenue = periodReportItems
       .filter((item) => item.type === "internal")
-      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      .reduce((sum, item) => sum + amountExVat(item), 0);
 
     const externalRevenue = periodReportItems
       .filter((item) => item.type === "external")
-      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      .reduce((sum, item) => sum + amountExVat(item), 0);
 
     const internalCost = periodReportItems
       .filter((item) => item.type === "internal")
-      .reduce((sum, item) => sum + Number(item.cost || 0), 0);
+      .reduce((sum, item) => sum + costExVat(item), 0);
 
     const externalCost = periodReportItems
       .filter((item) => item.type === "external")
-      .reduce((sum, item) => sum + Number(item.cost || 0), 0);
+      .reduce((sum, item) => sum + costExVat(item), 0);
 
     return {
       revenue,
@@ -497,8 +507,8 @@ const ReportsPage = () => {
 
     return Object.entries(grouped)
       .map(([weekStart, items]) => {
-        const totalRevenue = items.reduce((sum, row) => sum + Number(row.amount || 0), 0);
-        const totalProfit = items.reduce((sum, row) => sum + Number(row.amount || 0) - Number(row.cost || 0), 0);
+        const totalRevenue = items.reduce((sum, row) => sum + amountExVat(row), 0);
+        const totalProfit = items.reduce((sum, row) => sum + profitExVat(row), 0);
         return { weekStart, items, totalRevenue, totalProfit };
       })
       .sort((a, b) => (a.weekStart < b.weekStart ? 1 : -1));
@@ -519,11 +529,11 @@ const ReportsPage = () => {
       }
 
       acc[mk].invoices += 1;
-      acc[mk].revenue += Number(item.amount || 0);
-      acc[mk].cost += Number(item.cost || 0);
+      acc[mk].revenue += amountExVat(item);
+      acc[mk].cost += costExVat(item);
 
-      if (item.type === "internal") acc[mk].internalRevenue += Number(item.amount || 0);
-      else acc[mk].externalRevenue += Number(item.amount || 0);
+      if (item.type === "internal") acc[mk].internalRevenue += amountExVat(item);
+      else acc[mk].externalRevenue += amountExVat(item);
 
       return acc;
     }, {});
@@ -550,7 +560,7 @@ const ReportsPage = () => {
     const units = reportItems.reduce((acc, item) => {
       const key = item.unit || "Unknown Unit";
       if (!acc[key]) acc[key] = { unit: key, amount: 0, jobs: 0 };
-      acc[key].amount += Number(item.amount || 0);
+      acc[key].amount += costExVat(item);
       acc[key].jobs += 1;
       return acc;
     }, {});
@@ -560,13 +570,118 @@ const ReportsPage = () => {
   const monthlyPartyUsage = useMemo(() => {
     const parties = monthlyPeriodItems.reduce((acc, item) => {
       const key = item.client || "Unknown";
-      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0, type: item.type };
+      if (!acc[key]) acc[key] = { name: key, count: 0, revenue: 0, spend: 0, type: item.type };
       acc[key].count += 1;
-      acc[key].revenue += Number(item.amount || 0);
+      acc[key].revenue += amountExVat(item);
+      acc[key].spend += costExVat(item);
       return acc;
     }, {});
     return Object.values(parties).sort((a, b) => b.count - a.count);
   }, [monthlyPeriodItems]);
+
+  const monthlyUnitSpendRows = useMemo(() => {
+    const grouped = monthlyPeriodItems.reduce((acc, item) => {
+      const key = item.unit || "Unknown Unit";
+      if (!acc[key]) acc[key] = { unit: key, spend: 0, jobs: 0 };
+      acc[key].spend += costExVat(item);
+      acc[key].jobs += 1;
+      return acc;
+    }, {});
+    return Object.values(grouped).sort((a, b) => b.spend - a.spend);
+  }, [monthlyPeriodItems]);
+
+  const monthlyExternalUsage = useMemo(
+    () => monthlyPartyUsage.filter((row) => row.type === "external").sort((a, b) => b.count - a.count),
+    [monthlyPartyUsage]
+  );
+
+  const monthlyInternalUsage = useMemo(
+    () => monthlyPartyUsage.filter((row) => row.type === "internal").sort((a, b) => b.spend - a.spend),
+    [monthlyPartyUsage]
+  );
+
+  const monthlyInsights = useMemo(() => {
+    const mostSpentUnit = monthlyUnitSpendRows[0] || null;
+    const leastSpentUnit = monthlyUnitSpendRows[monthlyUnitSpendRows.length - 1] || null;
+    const externalSpent = monthlyPeriodItems
+      .filter((item) => item.type === "external")
+      .reduce((sum, item) => sum + costExVat(item), 0);
+    const internalSpent = monthlyPeriodItems
+      .filter((item) => item.type === "internal")
+      .reduce((sum, item) => sum + costExVat(item), 0);
+    const mostUsedExternal = monthlyExternalUsage[0] || null;
+    const leastUsedExternal = monthlyExternalUsage[monthlyExternalUsage.length - 1] || null;
+
+    return {
+      mostSpentUnit,
+      leastSpentUnit,
+      externalSpent,
+      internalSpent,
+      mostUsedExternal,
+      leastUsedExternal
+    };
+  }, [monthlyPeriodItems, monthlyUnitSpendRows, monthlyExternalUsage]);
+
+  const monthHeading = useMemo(() => {
+    const d = new Date(`${selectedMonth}-01`);
+    if (Number.isNaN(d.getTime())) return selectedMonth;
+    return d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  }, [selectedMonth]);
+
+  const monthlyFinanceBreakdown = useMemo(() => {
+    const buildTypeSummary = (type) => {
+      const rows = monthlyPeriodItems.filter((item) => item.type === type);
+      const amountIncl = rows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const costIncl = rows.reduce((sum, item) => sum + Number(item.cost || 0), 0);
+      const amountEx = rows.reduce((sum, item) => sum + amountExVat(item), 0);
+      const costEx = rows.reduce((sum, item) => sum + costExVat(item), 0);
+
+      return {
+        invoices: rows.length,
+        amountIncl,
+        amountEx,
+        amountVat: amountIncl - amountEx,
+        costIncl,
+        costEx,
+        costVat: costIncl - costEx,
+        profitEx: amountEx - costEx,
+        profitIncl: amountIncl - costIncl
+      };
+    };
+
+    const overallAmountIncl = monthlyPeriodItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const overallCostIncl = monthlyPeriodItems.reduce((sum, item) => sum + Number(item.cost || 0), 0);
+    const overallAmountEx = monthlyPeriodItems.reduce((sum, item) => sum + amountExVat(item), 0);
+    const overallCostEx = monthlyPeriodItems.reduce((sum, item) => sum + costExVat(item), 0);
+
+    return {
+      overall: {
+        invoices: monthlyPeriodItems.length,
+        amountIncl: overallAmountIncl,
+        amountEx: overallAmountEx,
+        amountVat: overallAmountIncl - overallAmountEx,
+        costIncl: overallCostIncl,
+        costEx: overallCostEx,
+        costVat: overallCostIncl - overallCostEx,
+        profitEx: overallAmountEx - overallCostEx,
+        profitIncl: overallAmountIncl - overallCostIncl
+      },
+      external: buildTypeSummary("external"),
+      internal: buildTypeSummary("internal")
+    };
+  }, [monthlyPeriodItems]);
+
+  const monthlySimpleMetrics = useMemo(() => {
+    const overall = monthlyFinanceBreakdown.overall;
+    return {
+      amountIncl: overall.amountIncl,
+      amountEx: overall.amountEx,
+      costIncl: overall.costIncl,
+      costEx: overall.costEx,
+      totalVat: overall.amountVat + overall.costVat,
+      profit: overall.profitEx
+    };
+  }, [monthlyFinanceBreakdown]);
 
   const engineTableItems = useMemo(
     () =>
@@ -584,7 +699,7 @@ const ReportsPage = () => {
     [chartRows]
   );
 
-  const buildPdf = () => {
+  const buildWeeklyPdf = () => {
     if (!periodReportItems.length) {
       alert("No report rows in the selected period.");
       return null;
@@ -594,7 +709,7 @@ const ReportsPage = () => {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
 
-    const margin = 12;
+    const margin = 14;
     const contentWidth = pageWidth - margin * 2;
     let y = margin;
 
@@ -603,25 +718,21 @@ const ReportsPage = () => {
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(17);
     pdf.setFont(undefined, "bold");
-    pdf.text("OC PULSE FINANCIAL REPORT", margin + 4, y + 8);
+    pdf.text("OC PULSE WEEKLY REPORT (EX VAT)", margin + 4, y + 8);
 
     pdf.setFontSize(8);
     pdf.setTextColor(148, 163, 184);
-    pdf.text(
-      `${period === "weekly" ? "Weekly" : "Monthly"} Summary | Period ${rangeFrom} to ${rangeTo}`,
-      margin + 4,
-      y + 14
-    );
+    pdf.text(`Weekly Summary | Period ${rangeFrom} to ${rangeTo}`, margin + 4, y + 14);
     pdf.text(`Printed ${new Date().toLocaleDateString("en-GB")}`, pageWidth - margin - 35, y + 14);
 
     y += 26;
 
     const metricWidth = (contentWidth - 9) / 4;
     const metricData = [
-      { label: "Revenue", value: money.format(totals.revenue), color: [37, 99, 235] },
-      { label: "Costs", value: money.format(totals.costs), color: [251, 146, 60] },
+      { label: "Revenue (Ex VAT)", value: money.format(totals.revenue), color: [37, 99, 235] },
+      { label: "Costs (Ex VAT)", value: money.format(totals.costs), color: [251, 146, 60] },
       { label: "Net Profit", value: money.format(totals.profit), color: [16, 185, 129] },
-      { label: "Invoices", value: String(periodReportItems.length), color: [99, 102, 241] }
+      { label: "Rows", value: String(periodReportItems.length), color: [99, 102, 241] }
     ];
 
     metricData.forEach((metric, index) => {
@@ -647,8 +758,8 @@ const ReportsPage = () => {
       { label: "Type", width: 14, key: "type" },
       { label: "Description", width: 56, key: "description" },
       { label: "Unit", width: 22, key: "unit" },
-      { label: "Amount", width: 18, key: "amount" },
-      { label: "Cost", width: 18, key: "cost" },
+      { label: "Amount Ex VAT", width: 21, key: "amount" },
+      { label: "Cost Ex VAT", width: 21, key: "cost" },
       { label: "Profit", width: 18, key: "profit" }
     ];
     const baseTotalWidth = baseColumns.reduce((sum, col) => sum + col.width, 0);
@@ -688,9 +799,9 @@ const ReportsPage = () => {
         type: row.type === "internal" ? "Internal" : "External",
         description: row.description || "",
         unit: row.unit || "",
-        amount: money.format(Number(row.amount || 0)),
-        cost: money.format(Number(row.cost || 0)),
-        profit: money.format(Number(row.amount || 0) - Number(row.cost || 0))
+        amount: money.format(amountExVat(row)),
+        cost: money.format(costExVat(row)),
+        profit: money.format(profitExVat(row))
       };
 
       const lineHeight = 3.5;
@@ -731,22 +842,145 @@ const ReportsPage = () => {
     const footerY = pageHeight - 6;
     pdf.setTextColor(100, 116, 139);
     pdf.setFontSize(7);
-    pdf.text("OC PULSE | Financial engine report", pageWidth / 2, footerY, { align: "center" });
+    pdf.text("OC PULSE | Weekly financial report (Ex VAT)", pageWidth / 2, footerY, { align: "center" });
 
     return pdf;
   };
 
-  const handlePreviewPDF = () => {
-    const pdf = buildPdf();
+  const buildMonthlyPdf = () => {
+    if (!monthlyPeriodItems.length) {
+      alert("No monthly rows for the selected month.");
+      return null;
+    }
+
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const margin = 14;
+    const contentWidth = pageWidth - margin * 2;
+    let y = margin;
+
+    pdf.setFillColor(15, 23, 42);
+    pdf.roundedRect(margin, y, contentWidth, 24, 2, 2, "F");
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(17);
+    pdf.setFont(undefined, "bold");
+    pdf.text("OC PULSE MONTHLY STORY REPORT", margin + 4, y + 9);
+    pdf.setFontSize(12.5);
+    pdf.text(monthHeading, margin + 4, y + 17);
+    pdf.setFontSize(8);
+    pdf.setTextColor(148, 163, 184);
+    pdf.text(`Printed ${new Date().toLocaleDateString("en-GB")}`, pageWidth - margin - 36, y + 17);
+    y += 31;
+
+    pdf.setFillColor(255, 249, 229);
+    pdf.roundedRect(margin, y, contentWidth, 18, 2, 2, "F");
+    pdf.setDrawColor(245, 158, 11);
+    pdf.roundedRect(margin, y, contentWidth, 18, 2, 2);
+    pdf.setTextColor(120, 53, 15);
+    pdf.setFont(undefined, "bold");
+    pdf.setFontSize(9.8);
+    pdf.text("Simple Definitions", margin + 3, y + 5.5);
+    pdf.setFont(undefined, "normal");
+    pdf.setFontSize(8.8);
+    pdf.text("Amount = what we billed the owner. Cost = what we were billed / paid.", margin + 3, y + 11.5);
+    pdf.text("Ex VAT = Incl VAT / 1.15 | VAT Total = Amount VAT + Cost VAT | Profit = Amount Ex VAT - Cost Ex VAT", margin + 3, y + 16);
+    y += 23;
+
+    pdf.setFillColor(248, 250, 252);
+    pdf.roundedRect(margin, y, contentWidth, 82, 2, 2, "F");
+    pdf.setDrawColor(203, 213, 225);
+    pdf.roundedRect(margin, y, contentWidth, 82, 2, 2);
+    pdf.setTextColor(15, 23, 42);
+    pdf.setFont(undefined, "bold");
+    pdf.setFontSize(12);
+    pdf.text("Monthly Summary", margin + 4, y + 8);
+    pdf.setFont(undefined, "normal");
+    pdf.setFontSize(10);
+
+    const leftX = margin + 4;
+    const rightX = margin + contentWidth / 2 + 4;
+    const rowGap = 10;
+    let rowY = y + 18;
+
+    const drawMetric = (x, label, value) => {
+      pdf.setTextColor(71, 85, 105);
+      pdf.setFont(undefined, "normal");
+      pdf.text(label, x, rowY);
+      pdf.setTextColor(15, 23, 42);
+      pdf.setFont(undefined, "bold");
+      pdf.text(value, x, rowY + 5);
+    };
+
+    drawMetric(leftX, "Amount Including VAT", money.format(monthlySimpleMetrics.amountIncl));
+    drawMetric(rightX, "Amount Excluding VAT", money.format(monthlySimpleMetrics.amountEx));
+    rowY += rowGap;
+    drawMetric(leftX, "Cost Including VAT", money.format(monthlySimpleMetrics.costIncl));
+    drawMetric(rightX, "Cost Excluding VAT", money.format(monthlySimpleMetrics.costEx));
+    rowY += rowGap;
+    drawMetric(leftX, "VAT Total", money.format(monthlySimpleMetrics.totalVat));
+    drawMetric(rightX, "Profit (Ex VAT)", money.format(monthlySimpleMetrics.profit));
+    rowY += rowGap;
+    drawMetric(
+      leftX,
+      "Most Used External Contractor",
+      monthlyInsights.mostUsedExternal
+        ? `${monthlyInsights.mostUsedExternal.name} (${monthlyInsights.mostUsedExternal.count} jobs)`
+        : "-"
+    );
+    drawMetric(
+      rightX,
+      "Most / Least Cost Unit",
+      monthlyInsights.mostSpentUnit && monthlyInsights.leastSpentUnit
+        ? `${monthlyInsights.mostSpentUnit.unit} / ${monthlyInsights.leastSpentUnit.unit}`
+        : "-"
+    );
+    y += 90;
+
+    pdf.setFillColor(236, 253, 245);
+    pdf.roundedRect(margin, y, contentWidth, 22, 2, 2, "F");
+    pdf.setDrawColor(16, 185, 129);
+    pdf.roundedRect(margin, y, contentWidth, 22, 2, 2);
+    pdf.setTextColor(6, 95, 70);
+    pdf.setFont(undefined, "bold");
+    pdf.setFontSize(10);
+    pdf.text(`${monthHeading} at a glance`, margin + 4, y + 7);
+    pdf.setFont(undefined, "normal");
+    pdf.setFontSize(9);
+    pdf.text(
+      `Amount Ex VAT ${money.format(monthlySimpleMetrics.amountEx)} | Cost Ex VAT ${money.format(monthlySimpleMetrics.costEx)} | Profit ${money.format(monthlySimpleMetrics.profit)}`,
+      margin + 4,
+      y + 14
+    );
+    pdf.text(
+      `VAT Total ${money.format(monthlySimpleMetrics.totalVat)} | Rows ${monthlyFinanceBreakdown.overall.invoices}`,
+      margin + 4,
+      y + 19
+    );
+
+    const footerY = 291;
+    pdf.setTextColor(100, 116, 139);
+    pdf.setFontSize(7);
+    pdf.text(`OC PULSE | Monthly story report (${selectedMonth})`, pageWidth / 2, footerY, { align: "center" });
+
+    return pdf;
+  };
+
+  const resolvePdfMode = () => (activeView === "monthly" ? "monthly" : "weekly");
+
+  const buildPdf = (mode = resolvePdfMode()) => (mode === "monthly" ? buildMonthlyPdf() : buildWeeklyPdf());
+
+  const handlePreviewPDF = (mode = resolvePdfMode()) => {
+    const pdf = buildPdf(mode);
     if (!pdf) return;
+    setPdfPreviewMode(mode);
     setPdfUrl(pdf.output("dataurlstring"));
     setShowPdfViewer(true);
   };
 
-  const handleExportPDF = () => {
-    const pdf = buildPdf();
+  const handleExportPDF = (mode = resolvePdfMode()) => {
+    const pdf = buildPdf(mode);
     if (!pdf) return;
-    pdf.save(`OC-PULSE-${period}-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+    pdf.save(`OC-PULSE-${mode}-report-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   const getRowsForActiveView = () => {
@@ -1020,11 +1254,11 @@ const ReportsPage = () => {
 
           <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <GlassPanel className="p-4">
-              <p className="text-[10px] uppercase font-black tracking-wider text-blue-500">Revenue</p>
+              <p className="text-[10px] uppercase font-black tracking-wider text-blue-500">Revenue (Ex VAT)</p>
               <p className="text-2xl font-black text-slate-900 mt-2">{money.format(totals.revenue)}</p>
             </GlassPanel>
             <GlassPanel className="p-4">
-              <p className="text-[10px] uppercase font-black tracking-wider text-orange-500">Costs</p>
+              <p className="text-[10px] uppercase font-black tracking-wider text-orange-500">Costs (Ex VAT)</p>
               <p className="text-2xl font-black text-slate-900 mt-2">{money.format(totals.costs)}</p>
             </GlassPanel>
             <GlassPanel className="p-4">
@@ -1043,7 +1277,7 @@ const ReportsPage = () => {
                 <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">Add Manual Report Row</h2>
                 <p className="mt-1 text-[11px] text-slate-500">
                   Owner Invoice = what owner is billed. Contractor Invoice = invoice you received.
-                  Cost = what you paid contractor. Profit = Amount billed to owner - Cost.
+                  Cost = what you paid contractor. Profit is calculated Ex VAT automatically.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
                   <input
@@ -1185,13 +1419,13 @@ const ReportsPage = () => {
                       Save Report
                     </button>
                     <button
-                      onClick={handlePreviewPDF}
+                      onClick={() => handlePreviewPDF("weekly")}
                       className="bg-blue-600 text-white rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider"
                     >
                       Preview PDF
                     </button>
                     <button
-                      onClick={handleExportPDF}
+                      onClick={() => handleExportPDF("weekly")}
                       className="bg-emerald-600 text-white rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider flex items-center gap-2"
                     >
                       <FaFilePdf size={12} /> Download
@@ -1210,8 +1444,8 @@ const ReportsPage = () => {
                         <th className="text-left p-3">Type</th>
                         <th className="text-left p-3">Description</th>
                         <th className="text-left p-3">Unit</th>
-                        <th className="text-right p-3">Amount</th>
-                        <th className="text-right p-3">Cost</th>
+                        <th className="text-right p-3">Amount (Ex VAT)</th>
+                        <th className="text-right p-3">Cost (Ex VAT)</th>
                         <th className="text-right p-3">Profit</th>
                         <th className="text-center p-3">Actions</th>
                       </tr>
@@ -1227,7 +1461,7 @@ const ReportsPage = () => {
                       {engineTableItems.map((item) => {
                         const isEditing = editingId === item.id;
                         const row = isEditing ? editingData : item;
-                        const profit = Number(row.amount || 0) - Number(row.cost || 0);
+                        const profit = profitExVat(row);
 
                         return (
                           <tr key={item.id} className="border-t border-slate-100 hover:bg-slate-50">
@@ -1338,7 +1572,7 @@ const ReportsPage = () => {
                                   className="bg-white border border-slate-200 rounded px-2 py-1 w-full text-right"
                                 />
                               ) : (
-                                money.format(Number(row.amount || 0))
+                                money.format(amountExVat(row))
                               )}
                             </td>
                             <td className="p-2 align-top text-right font-semibold">
@@ -1353,7 +1587,7 @@ const ReportsPage = () => {
                                   className="bg-white border border-slate-200 rounded px-2 py-1 w-full text-right"
                                 />
                               ) : (
-                                money.format(Number(row.cost || 0))
+                                money.format(costExVat(row))
                               )}
                             </td>
                             <td className="p-2 align-top text-right font-black text-blue-700">{money.format(profit)}</td>
@@ -1443,7 +1677,7 @@ const ReportsPage = () => {
                       <span className="font-black">{selectedMonthData?.invoices || 0}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Revenue</span>
+                      <span className="text-slate-500">Revenue (Ex VAT)</span>
                       <span className="font-black">{money.format(selectedMonthData?.revenue || 0)}</span>
                     </div>
                     <div className="flex justify-between">
@@ -1515,13 +1749,16 @@ const ReportsPage = () => {
             </div>
           </section>}
 
-          {activeView === "monthly" && (
+                    {activeView === "monthly" && (
             <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               <div className="xl:col-span-2 space-y-6">
                 <div className="glass-flash relative overflow-hidden bg-white/70 backdrop-blur-2xl border border-white/35 rounded-2xl p-5 shadow-[0_10px_35px_rgba(15,23,42,0.30)]">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-black uppercase tracking-wider text-slate-900">Monthly Profit Board</h3>
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase font-black tracking-wider text-slate-500">Monthly Report</p>
+                      <h3 className="text-xl md:text-2xl font-black tracking-tight text-slate-900">{monthHeading}</h3>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
                       <input
                         type="month"
                         value={selectedMonth}
@@ -1529,108 +1766,96 @@ const ReportsPage = () => {
                         className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs"
                       />
                       <button
-                        onClick={handleExportPDF}
+                        onClick={() => handlePreviewPDF("monthly")}
+                        className="bg-blue-600 text-white rounded-lg px-3 py-1.5 text-[11px] font-black uppercase"
+                      >
+                        Preview
+                      </button>
+                      <button
+                        onClick={() => handleExportPDF("monthly")}
                         className="bg-emerald-600 text-white rounded-lg px-3 py-1.5 text-[11px] font-black uppercase"
                       >
                         Monthly PDF
                       </button>
                     </div>
                   </div>
-                  <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <p className="text-[10px] uppercase text-slate-500 font-black">Invoices</p>
-                      <p className="text-xl font-black mt-1">{selectedMonthData?.invoices || 0}</p>
+
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">
+                    <p className="font-black">Amount = what we billed the owner.</p>
+                    <p className="font-black mt-0.5">Cost = what we were billed/paid.</p>
+                    <p className="mt-1">Ex VAT = Incl VAT / 1.15 | VAT = Incl VAT - Ex VAT</p>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    <div className="rounded-xl bg-white border border-slate-200 p-3">
+                      <p className="text-[10px] uppercase text-slate-500 font-black">Amount Incl VAT</p>
+                      <p className="text-xl font-black text-slate-900 mt-1">{money.format(monthlySimpleMetrics.amountIncl)}</p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <p className="text-[10px] uppercase text-slate-500 font-black">Revenue</p>
-                      <p className="text-xl font-black mt-1">{money.format(selectedMonthData?.revenue || 0)}</p>
+                    <div className="rounded-xl bg-white border border-slate-200 p-3">
+                      <p className="text-[10px] uppercase text-slate-500 font-black">Amount Ex VAT</p>
+                      <p className="text-xl font-black text-slate-900 mt-1">{money.format(monthlySimpleMetrics.amountEx)}</p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <p className="text-[10px] uppercase text-slate-500 font-black">Cost</p>
-                      <p className="text-xl font-black mt-1">{money.format(selectedMonthData?.cost || 0)}</p>
+                    <div className="rounded-xl bg-white border border-slate-200 p-3">
+                      <p className="text-[10px] uppercase text-slate-500 font-black">Cost Incl VAT</p>
+                      <p className="text-xl font-black text-slate-900 mt-1">{money.format(monthlySimpleMetrics.costIncl)}</p>
                     </div>
-                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                      <p className="text-[10px] uppercase text-slate-500 font-black">Profit</p>
-                      <p className="text-xl font-black mt-1 text-blue-700">{money.format(selectedMonthData?.profit || 0)}</p>
+                    <div className="rounded-xl bg-white border border-slate-200 p-3">
+                      <p className="text-[10px] uppercase text-slate-500 font-black">Cost Ex VAT</p>
+                      <p className="text-xl font-black text-slate-900 mt-1">{money.format(monthlySimpleMetrics.costEx)}</p>
+                    </div>
+                    <div className="rounded-xl bg-white border border-slate-200 p-3">
+                      <p className="text-[10px] uppercase text-slate-500 font-black">VAT Total</p>
+                      <p className="text-xl font-black text-slate-900 mt-1">{money.format(monthlySimpleMetrics.totalVat)}</p>
+                    </div>
+                    <div className="rounded-xl bg-white border border-emerald-200 p-3">
+                      <p className="text-[10px] uppercase text-emerald-700 font-black">Profit (Ex VAT)</p>
+                      <p className="text-xl font-black text-emerald-700 mt-1">{money.format(monthlySimpleMetrics.profit)}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="glass-flash relative overflow-hidden bg-white/70 backdrop-blur-2xl border border-white/35 rounded-2xl p-5 shadow-[0_10px_35px_rgba(15,23,42,0.30)]">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 mb-4">
-                    Unit Spend (Selected Month)
-                  </h3>
-                  <div className="space-y-3">
-                    {Object.values(
-                      monthlyPeriodItems.reduce((acc, item) => {
-                        const key = item.unit || "Unknown Unit";
-                        if (!acc[key]) acc[key] = { unit: key, amount: 0 };
-                        acc[key].amount += Number(item.amount || 0);
-                        return acc;
-                      }, {})
-                    )
-                      .sort((a, b) => b.amount - a.amount)
-                      .slice(0, 6)
-                      .map((row, idx, arr) => {
-                        const max = arr[0]?.amount || 1;
-                        return (
-                          <div key={row.unit} className="space-y-1">
-                            <div className="flex justify-between text-xs">
-                              <span className="font-semibold text-slate-700">{row.unit}</span>
-                              <span className="font-black text-slate-900">{money.format(row.amount)}</span>
-                            </div>
-                            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                              <div className="h-full bg-blue-600" style={{ width: `${(row.amount / max) * 100}%` }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    {monthlyPeriodItems.length === 0 && (
-                      <p className="text-xs text-slate-500">No data in this month yet.</p>
-                    )}
+                <div className="glass-flash relative overflow-hidden bg-[#fff9e8] backdrop-blur-2xl border border-amber-200 rounded-2xl p-5 shadow-[0_10px_35px_rgba(15,23,42,0.20)]">
+                  <h3 className="text-sm font-black uppercase tracking-wider text-amber-900">Quick Notes</h3>
+                  <div className="mt-3 space-y-2 text-xs text-amber-950">
+                    <p>Invoices this month: <span className="font-black">{monthlyFinanceBreakdown.overall.invoices}</span></p>
+                    <p>
+                      Most used external contractor: <span className="font-black">{monthlyInsights.mostUsedExternal ? `${monthlyInsights.mostUsedExternal.name} (${monthlyInsights.mostUsedExternal.count} jobs)` : "-"}</span>
+                    </p>
+                    <p>
+                      Most cost / least cost unit: <span className="font-black">{monthlyInsights.mostSpentUnit && monthlyInsights.leastSpentUnit ? `${monthlyInsights.mostSpentUnit.unit} / ${monthlyInsights.leastSpentUnit.unit}` : "-"}</span>
+                    </p>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-6">
                 <div className="glass-flash relative overflow-hidden bg-white/70 backdrop-blur-2xl border border-white/35 rounded-2xl p-5 shadow-[0_10px_35px_rgba(15,23,42,0.30)]">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 mb-3">Most/Least Unit</h3>
-                  {(() => {
-                    const rows = Object.values(
-                      monthlyPeriodItems.reduce((acc, item) => {
-                        const key = item.unit || "Unknown Unit";
-                        if (!acc[key]) acc[key] = { unit: key, amount: 0 };
-                        acc[key].amount += Number(item.amount || 0);
-                        return acc;
-                      }, {})
-                    ).sort((a, b) => b.amount - a.amount);
-                    const top = rows[0];
-                    const least = rows[rows.length - 1];
-                    return (
-                      <div className="space-y-2 text-xs">
-                        <p className="text-slate-500">Highest spend</p>
-                        <p className="font-black">{top ? `${top.unit} • ${money.format(top.amount)}` : "-"}</p>
-                        <p className="text-slate-500 mt-3">Lowest spend</p>
-                        <p className="font-black">{least ? `${least.unit} • ${money.format(least.amount)}` : "-"}</p>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                <div className="glass-flash relative overflow-hidden bg-white/70 backdrop-blur-2xl border border-white/35 rounded-2xl p-5 shadow-[0_10px_35px_rgba(15,23,42,0.30)]">
-                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 mb-3">Party Usage</h3>
-                  <div className="space-y-2 max-h-72 overflow-y-auto">
-                    {monthlyPartyUsage.slice(0, 10).map((row) => (
-                      <div key={row.name} className="rounded-lg bg-slate-50 border border-slate-200 p-2">
-                        <p className="text-xs font-black">{row.name}</p>
-                        <p className="text-[11px] text-slate-500">
-                          {row.type} • {row.count} jobs • {money.format(row.revenue)}
-                        </p>
-                      </div>
-                    ))}
-                    {monthlyPartyUsage.length === 0 && (
-                      <p className="text-xs text-slate-500">No contractor/client usage this month yet.</p>
-                    )}
+                  <h3 className="text-sm font-black uppercase tracking-wider text-slate-900 mb-3">Simple Breakdown</h3>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">External Amount Ex VAT</span>
+                      <span className="font-black">{money.format(monthlyFinanceBreakdown.external.amountEx)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">External Cost Ex VAT</span>
+                      <span className="font-black">{money.format(monthlyFinanceBreakdown.external.costEx)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Internal Amount Ex VAT</span>
+                      <span className="font-black">{money.format(monthlyFinanceBreakdown.internal.amountEx)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Internal Cost Ex VAT</span>
+                      <span className="font-black">{money.format(monthlyFinanceBreakdown.internal.costEx)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">External VAT Total</span>
+                      <span className="font-black">{money.format(monthlyFinanceBreakdown.external.amountVat + monthlyFinanceBreakdown.external.costVat)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Internal VAT Total</span>
+                      <span className="font-black">{money.format(monthlyFinanceBreakdown.internal.amountVat + monthlyFinanceBreakdown.internal.costVat)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1677,7 +1902,7 @@ const ReportsPage = () => {
                     <span className="font-black">{allTimeUnitSpend[0]?.unit || "-"}</span>
                   </div>
                   <button
-                    onClick={handleExportPDF}
+                    onClick={() => handleExportPDF("weekly")}
                     className="mt-4 bg-slate-900 text-white rounded-xl px-4 py-2 text-xs font-black uppercase tracking-wider"
                   >
                     Export Current View PDF
@@ -1692,8 +1917,14 @@ const ReportsPage = () => {
       {showPdfViewer && (
         <div className="fixed inset-0 bg-slate-950/75 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden border border-slate-200">
-            <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
-              <p className="font-black uppercase text-sm tracking-wider">Report PDF Preview</p>
+            <div
+              className={`text-white p-4 flex items-center justify-between ${
+                pdfPreviewMode === "monthly" ? "bg-emerald-700" : "bg-slate-900"
+              }`}
+            >
+              <p className="font-black uppercase text-sm tracking-wider">
+                {pdfPreviewMode === "monthly" ? "Monthly PDF Preview" : "Weekly PDF Preview"}
+              </p>
               <button
                 onClick={() => setShowPdfViewer(false)}
                 className="bg-white/10 hover:bg-white/20 rounded-lg p-2 transition-colors"
@@ -1710,6 +1941,7 @@ const ReportsPage = () => {
 };
 
 export default ReportsPage;
+
 
 
 
