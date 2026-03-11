@@ -39,6 +39,11 @@ const money = new Intl.NumberFormat("en-ZA", {
   maximumFractionDigits: 2
 });
 
+const percent = new Intl.NumberFormat("en-ZA", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+
 const VAT_RATE = 0.15;
 const VAT_DIVISOR = 1 + VAT_RATE;
 
@@ -497,6 +502,24 @@ const ReportsPage = () => {
     };
   }, [periodReportItems]);
 
+  const managerMetrics = useMemo(() => {
+    const profitMargin = totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0;
+    const costRatio = totals.revenue > 0 ? (totals.costs / totals.revenue) * 100 : 0;
+    const profitPer100 = totals.revenue > 0 ? (totals.profit / totals.revenue) * 100 : 0;
+    const costPer100 = totals.revenue > 0 ? (totals.costs / totals.revenue) * 100 : 0;
+
+    return {
+      profitMargin,
+      costRatio,
+      profitPer100,
+      costPer100,
+      statement:
+        totals.revenue > 0
+          ? `For every R100 charged to the owner, we make R${profitPer100.toFixed(2)} profit and spend R${costPer100.toFixed(2)} in cost.`
+          : "No revenue in this period yet, so profit margin and cost ratio cannot be calculated."
+    };
+  }, [totals]);
+
   const weeklyGroups = useMemo(() => {
     const grouped = periodReportItems.reduce((acc, item) => {
       const weekStart = startOfWeek(item.date).toISOString().slice(0, 10);
@@ -714,25 +737,31 @@ const ReportsPage = () => {
     let y = margin;
 
     pdf.setFillColor(15, 23, 42);
-    pdf.roundedRect(margin, y, contentWidth, 20, 2, 2, "F");
+    pdf.roundedRect(margin, y, contentWidth, 24, 2, 2, "F");
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(17);
     pdf.setFont(undefined, "bold");
     pdf.text("OC PULSE WEEKLY REPORT (EX VAT)", margin + 4, y + 8);
 
-    pdf.setFontSize(8);
+    pdf.setFontSize(10);
+    pdf.setFont(undefined, "bold");
+    pdf.setTextColor(226, 232, 240);
+    pdf.text(`Period: ${rangeFrom} to ${rangeTo}`, margin + 4, y + 15);
+    pdf.setFontSize(8.5);
+    pdf.setFont(undefined, "normal");
     pdf.setTextColor(148, 163, 184);
-    pdf.text(`Weekly Summary | Period ${rangeFrom} to ${rangeTo}`, margin + 4, y + 14);
-    pdf.text(`Printed ${new Date().toLocaleDateString("en-GB")}`, pageWidth - margin - 35, y + 14);
+    pdf.text(`Printed ${new Date().toLocaleDateString("en-GB")}`, pageWidth - margin - 35, y + 15);
 
-    y += 26;
+    y += 30;
 
-    const metricWidth = (contentWidth - 9) / 4;
+    const metricWidth = (contentWidth - 15) / 6;
     const metricData = [
       { label: "Revenue (Ex VAT)", value: money.format(totals.revenue), color: [37, 99, 235] },
       { label: "Costs (Ex VAT)", value: money.format(totals.costs), color: [251, 146, 60] },
       { label: "Net Profit", value: money.format(totals.profit), color: [16, 185, 129] },
-      { label: "Rows", value: String(periodReportItems.length), color: [99, 102, 241] }
+      { label: "Rows", value: String(periodReportItems.length), color: [99, 102, 241] },
+      { label: "Profit Margin", value: `${percent.format(managerMetrics.profitMargin)}%`, color: [8, 145, 178] },
+      { label: "Cost Ratio", value: `${percent.format(managerMetrics.costRatio)}%`, color: [244, 63, 94] }
     ];
 
     metricData.forEach((metric, index) => {
@@ -749,6 +778,20 @@ const ReportsPage = () => {
     });
 
     y += 22;
+
+    pdf.setFillColor(248, 250, 252);
+    pdf.roundedRect(margin, y, contentWidth, 14, 2, 2, "F");
+    pdf.setDrawColor(203, 213, 225);
+    pdf.roundedRect(margin, y, contentWidth, 14, 2, 2);
+    pdf.setTextColor(51, 65, 85);
+    pdf.setFontSize(8);
+    pdf.setFont(undefined, "bold");
+    pdf.text("Pulse Findings", margin + 3, y + 5);
+    pdf.setFont(undefined, "normal");
+    const wrappedManagerStatement = pdf.splitTextToSize(managerMetrics.statement, contentWidth - 6);
+    pdf.text(wrappedManagerStatement, margin + 3, y + 10);
+
+    y += 18;
 
     const baseColumns = [
       { label: "Date", width: 20, key: "date" },
@@ -860,17 +903,22 @@ const ReportsPage = () => {
     let y = margin;
 
     pdf.setFillColor(15, 23, 42);
-    pdf.roundedRect(margin, y, contentWidth, 24, 2, 2, "F");
+    pdf.roundedRect(margin, y, contentWidth, 30, 2, 2, "F");
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(17);
     pdf.setFont(undefined, "bold");
     pdf.text("OC PULSE MONTHLY STORY REPORT", margin + 4, y + 9);
     pdf.setFontSize(12.5);
     pdf.text(monthHeading, margin + 4, y + 17);
-    pdf.setFontSize(8);
+    pdf.setFontSize(10);
+    pdf.setFont(undefined, "bold");
+    pdf.setTextColor(226, 232, 240);
+    pdf.text(`Period: ${rangeFrom} to ${rangeTo}`, margin + 4, y + 24);
+    pdf.setFontSize(8.5);
+    pdf.setFont(undefined, "normal");
     pdf.setTextColor(148, 163, 184);
-    pdf.text(`Printed ${new Date().toLocaleDateString("en-GB")}`, pageWidth - margin - 36, y + 17);
-    y += 31;
+    pdf.text(`Printed ${new Date().toLocaleDateString("en-GB")}`, pageWidth - margin - 36, y + 24);
+    y += 37;
 
     pdf.setFillColor(255, 249, 229);
     pdf.roundedRect(margin, y, contentWidth, 18, 2, 2, "F");
@@ -920,6 +968,9 @@ const ReportsPage = () => {
     drawMetric(leftX, "VAT Total", money.format(monthlySimpleMetrics.totalVat));
     drawMetric(rightX, "Profit (Ex VAT)", money.format(monthlySimpleMetrics.profit));
     rowY += rowGap;
+    drawMetric(leftX, "Profit Margin", `${percent.format(managerMetrics.profitMargin)}%`);
+    drawMetric(rightX, "Cost Ratio", `${percent.format(managerMetrics.costRatio)}%`);
+    rowY += rowGap;
     drawMetric(
       leftX,
       "Most Used External Contractor",
@@ -934,16 +985,16 @@ const ReportsPage = () => {
         ? `${monthlyInsights.mostSpentUnit.unit} / ${monthlyInsights.leastSpentUnit.unit}`
         : "-"
     );
-    y += 90;
+    y += 100;
 
     pdf.setFillColor(236, 253, 245);
-    pdf.roundedRect(margin, y, contentWidth, 22, 2, 2, "F");
+    pdf.roundedRect(margin, y, contentWidth, 28, 2, 2, "F");
     pdf.setDrawColor(16, 185, 129);
-    pdf.roundedRect(margin, y, contentWidth, 22, 2, 2);
+    pdf.roundedRect(margin, y, contentWidth, 28, 2, 2);
     pdf.setTextColor(6, 95, 70);
     pdf.setFont(undefined, "bold");
     pdf.setFontSize(10);
-    pdf.text(`${monthHeading} at a glance`, margin + 4, y + 7);
+    pdf.text(`${monthHeading} Pulse Findings`, margin + 4, y + 7);
     pdf.setFont(undefined, "normal");
     pdf.setFontSize(9);
     pdf.text(
@@ -952,10 +1003,11 @@ const ReportsPage = () => {
       y + 14
     );
     pdf.text(
-      `VAT Total ${money.format(monthlySimpleMetrics.totalVat)} | Rows ${monthlyFinanceBreakdown.overall.invoices}`,
+      `VAT Total ${money.format(monthlySimpleMetrics.totalVat)} | Margin ${percent.format(managerMetrics.profitMargin)}% | Cost Ratio ${percent.format(managerMetrics.costRatio)}%`,
       margin + 4,
       y + 19
     );
+    pdf.text(managerMetrics.statement, margin + 4, y + 24);
 
     const footerY = 291;
     pdf.setTextColor(100, 116, 139);
@@ -1139,27 +1191,27 @@ const ReportsPage = () => {
                     type="date"
                     value={anchorDate}
                     onChange={(e) => setAnchorDate(e.target.value)}
-                    className="text-xs font-bold bg-transparent outline-none"
+                    className="text-sm font-black text-slate-800 bg-transparent outline-none"
                   />
                 </div>
 
                 <div className="bg-white/90 rounded-xl px-3 py-2 border border-white flex gap-2 items-center">
-                  <span className="text-[10px] font-black uppercase text-slate-500">From</span>
+                  <span className="text-xs font-black uppercase text-slate-600">From</span>
                   <input
                     type="date"
                     value={rangeFrom}
                     onChange={(e) => setRangeFrom(e.target.value)}
-                    className="text-xs font-semibold bg-transparent outline-none"
+                    className="text-sm font-black text-slate-800 bg-transparent outline-none"
                   />
                 </div>
 
                 <div className="bg-white/90 rounded-xl px-3 py-2 border border-white flex gap-2 items-center">
-                  <span className="text-[10px] font-black uppercase text-slate-500">To</span>
+                  <span className="text-xs font-black uppercase text-slate-600">To</span>
                   <input
                     type="date"
                     value={rangeTo}
                     onChange={(e) => setRangeTo(e.target.value)}
-                    className="text-xs font-semibold bg-transparent outline-none"
+                    className="text-sm font-black text-slate-800 bg-transparent outline-none"
                   />
                 </div>
               </div>
@@ -1252,7 +1304,7 @@ const ReportsPage = () => {
             </div>
           </section>
 
-          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
             <GlassPanel className="p-4">
               <p className="text-[10px] uppercase font-black tracking-wider text-blue-500">Revenue (Ex VAT)</p>
               <p className="text-2xl font-black text-slate-900 mt-2">{money.format(totals.revenue)}</p>
@@ -1269,7 +1321,23 @@ const ReportsPage = () => {
               <p className="text-[10px] uppercase font-black tracking-wider text-violet-500">Period Rows</p>
               <p className="text-2xl font-black text-slate-900 mt-2">{periodReportItems.length}</p>
             </GlassPanel>
+            <GlassPanel className="p-4">
+              <p className="text-[10px] uppercase font-black tracking-wider text-cyan-600">Profit Margin</p>
+              <p className="text-2xl font-black text-slate-900 mt-2">{percent.format(managerMetrics.profitMargin)}%</p>
+            </GlassPanel>
+            <GlassPanel className="p-4">
+              <p className="text-[10px] uppercase font-black tracking-wider text-rose-500">Cost Ratio</p>
+              <p className="text-2xl font-black text-slate-900 mt-2">{percent.format(managerMetrics.costRatio)}%</p>
+            </GlassPanel>
           </section>
+
+          <GlassPanel className="p-4">
+            <p className="text-[10px] uppercase font-black tracking-wider text-slate-500">Pulse Findings</p>
+            <p className="text-sm md:text-base font-black text-slate-900 mt-2">{managerMetrics.statement}</p>
+            <p className="text-[11px] text-slate-500 mt-2">
+              Profit margin is {percent.format(managerMetrics.profitMargin)}% and cost ratio is {percent.format(managerMetrics.costRatio)}% for the selected period.
+            </p>
+          </GlassPanel>
 
           {activeView === "weekly" && <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
             <div className="xl:col-span-1 space-y-6">
@@ -1941,7 +2009,5 @@ const ReportsPage = () => {
 };
 
 export default ReportsPage;
-
-
 
 
