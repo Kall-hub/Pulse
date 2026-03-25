@@ -4,12 +4,12 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../Config/firebaseConfig';
 import { BiBuildings, BiSearch } from 'react-icons/bi';
 
-const ApartmentAutocomplete = ({ value, onChange, placeholder = "e.g. HILLCREST A612", autoFocus = true, onSelect = null }) => {
+const ApartmentAutocomplete = ({ value, onChange, placeholder = "e.g. HILLCREST A612", autoFocus = true, onSelect = null, disabled = false }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [buildings, setBuildings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const inputRef = useRef(null);
+  const containerRef = useRef(null);
 
   // Fetch buildings on mount
   useEffect(() => {
@@ -70,6 +70,7 @@ const ApartmentAutocomplete = ({ value, onChange, placeholder = "e.g. HILLCREST 
 
   // Handle input change
   const handleInputChange = (e) => {
+    if (disabled) return;
     const newValue = e.target.value.toUpperCase();
     onChange(newValue);
     generateSuggestions(newValue);
@@ -77,6 +78,7 @@ const ApartmentAutocomplete = ({ value, onChange, placeholder = "e.g. HILLCREST 
 
   // Handle suggestion click
   const handleSelectSuggestion = (suggestion) => {
+    if (disabled) return;
     const fullUnit = `${suggestion.building} ${suggestion.unit}`;
     onChange(fullUnit);
     setSuggestions([]);
@@ -92,7 +94,7 @@ const ApartmentAutocomplete = ({ value, onChange, placeholder = "e.g. HILLCREST 
   // Close suggestions when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (inputRef.current && !inputRef.current.contains(e.target)) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
         setIsOpen(false);
       }
     };
@@ -101,25 +103,25 @@ const ApartmentAutocomplete = ({ value, onChange, placeholder = "e.g. HILLCREST 
   }, []);
 
   return (
-    <div className="relative w-full">
+    <div ref={containerRef} className="relative w-full">
       <div className="relative">
         {/* Icon */}
         <BiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
         
         {/* Input */}
         <input
-          ref={inputRef}
           autoFocus={autoFocus}
           type="text"
           placeholder={placeholder}
           value={value}
           onChange={handleInputChange}
+          disabled={disabled}
           onFocus={() => {
-            if (value.trim()) {
+            if (!disabled && value.trim()) {
               setIsOpen(true);
             }
           }}
-          className="w-full bg-slate-50 border border-slate-100 p-5 pl-12 rounded-2xl font-black uppercase outline-none focus:ring-2 ring-blue-600 text-slate-900 placeholder:text-slate-300 transition-all"
+          className="w-full bg-slate-50 border border-slate-100 p-5 pl-12 rounded-2xl font-black uppercase outline-none focus:ring-2 ring-blue-600 text-slate-900 placeholder:text-slate-300 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
         />
 
         {/* Pulse indicator - shows app is aware */}
@@ -138,12 +140,16 @@ const ApartmentAutocomplete = ({ value, onChange, placeholder = "e.g. HILLCREST 
       </div>
 
       {/* Suggestions Dropdown */}
-      {isOpen && suggestions.length > 0 && (
+      {isOpen && suggestions.length > 0 && !disabled && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 max-h-64 overflow-y-auto custom-scrollbar">
           {suggestions.map((suggestion, idx) => (
             <button
               key={idx}
-              onClick={() => handleSelectSuggestion(suggestion)}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handleSelectSuggestion(suggestion);
+              }}
               className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors border-b border-slate-100 last:border-b-0 flex items-center gap-3"
             >
               <BiBuildings className="text-blue-600 shrink-0" size={16} />
@@ -157,7 +163,7 @@ const ApartmentAutocomplete = ({ value, onChange, placeholder = "e.g. HILLCREST 
       )}
 
       {/* No results message */}
-      {isOpen && value && suggestions.length === 0 && !loading && (
+      {isOpen && value && suggestions.length === 0 && !loading && !disabled && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 text-center">
           <p className="text-[10px] font-bold text-slate-400 uppercase">
             No exact matches found <span className="text-slate-300">— but you can type anything!</span>

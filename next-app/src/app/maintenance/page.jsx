@@ -8,7 +8,7 @@ import {
   FaPlus, FaTools, FaClock, FaSearch, 
   FaCheckCircle, FaBars,
   FaFileSignature, FaExclamationCircle, 
-  FaTrash, FaPrint, FaArrowRight, FaCheck, FaTimes, FaUserCircle
+  FaTrash, FaPrint, FaArrowRight, FaCheck, FaTimes, FaUserCircle, FaEdit
 } from "react-icons/fa";
 
 import { db, auth } from '../Config/firebaseConfig';
@@ -32,6 +32,7 @@ const MaintenancePage = () => {
   const [userRole, setUserRole] = useState(null);
   
   const [printTicket, setPrintTicket] = useState(null);
+  const [editingTicket, setEditingTicket] = useState(null);
 
   // --- 1. READ DATA ---
   useEffect(() => {
@@ -177,6 +178,49 @@ const MaintenancePage = () => {
   const finalizeJob = async (ticketId) => {
     if(confirm("Mark this job card as complete and archive it?")) {
       try { await updateDoc(doc(db, "maintenance", ticketId), { status: 'completed', completedAt: new Date().toLocaleString() }); } catch (error) {}
+    }
+  };
+
+  const openEditModal = (ticket) => {
+    if (ticket.status === 'completed') return;
+    setEditingTicket(ticket);
+  };
+
+  const saveJobCardEdits = async (data) => {
+    if (!editingTicket) return;
+
+    const existingTasks = Array.isArray(editingTicket.tasks) ? editingTicket.tasks : [];
+    const updatedTasks = data.faults.map((fault, index) => {
+      const existingTask = existingTasks.find(task => String(task.id) === String(fault.id));
+      return {
+        id: existingTask?.id ?? fault.id ?? Date.now() + index,
+        desc: fault.description,
+        area: fault.area || 'General',
+        done: existingTask?.done ?? false,
+        liability: existingTask?.liability ?? null,
+        images: existingTask?.images ?? [],
+        completedAt: existingTask?.completedAt ?? null
+      };
+    });
+
+    const summaryIssue = data.faults.map(fault => `${fault.area}: ${fault.description}`).join(' | ');
+    const uniqueAreas = [...new Set(data.faults.map(fault => fault.area))];
+
+    try {
+      await updateDoc(doc(db, "maintenance", editingTicket.id), {
+        issue: summaryIssue,
+        areas: uniqueAreas,
+        rawFaults: data.faults.map(fault => ({
+          id: fault.id ?? Date.now(),
+          area: fault.area || 'General',
+          description: fault.description
+        })),
+        tasks: updatedTasks
+      });
+      setEditingTicket(null);
+    } catch (error) {
+      console.error('Failed to update maintenance job card:', error);
+      alert('Failed to save job card changes.');
     }
   };
 
@@ -391,6 +435,7 @@ const MaintenancePage = () => {
                             <option value="High">High Priority</option>
                           </select>
 
+                          <button onClick={() => openEditModal(job)} className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest bg-white border border-slate-200 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600"><FaEdit /> Edit</button>
                           <button onClick={() => handlePrint(job)} className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest bg-white border border-slate-200 px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-600"><FaPrint /> Print</button>
                           <button onClick={() => deleteTicket(job.id)} className="text-slate-300 hover:text-red-500 transition-colors"><FaTrash size={12}/></button>
                       </div>
@@ -533,6 +578,33 @@ const MaintenancePage = () => {
 
           {/* MODALS */}
           <MaintenanceForm isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onSubmit={addRequest} />
+          <MaintenanceForm
+            isOpen={!!editingTicket}
+            onClose={() => setEditingTicket(null)}
+            onSubmit={saveJobCardEdits}
+            initialData={editingTicket ? {
+              unit: editingTicket.unit || '',
+              faults: Array.isArray(editingTicket.tasks) && editingTicket.tasks.length > 0
+                ? editingTicket.tasks.map((task, index) => ({
+                    id: task.id ?? `task-${index}`,
+                    area: task.area || 'General',
+                    description: task.desc || ''
+                  }))
+                : Array.isArray(editingTicket.rawFaults) && editingTicket.rawFaults.length > 0
+                  ? editingTicket.rawFaults.map((fault, index) => ({
+                      id: fault.id ?? `fault-${index}`,
+                      area: fault.area || 'General',
+                      description: fault.description || ''
+                    }))
+                  : [],
+              vehicle: editingTicket.vehicle || null
+            } : null}
+            submitLabel="Save Job Card"
+            title="Edit Job Card"
+            subtitle="Add more issues or update descriptions"
+            lockUnit={true}
+            hideVehicle={true}
+          />
           
           {viewingReport && (
             <div className="fixed inset-0 z-200 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto print:hidden">

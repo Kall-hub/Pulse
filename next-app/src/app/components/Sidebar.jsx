@@ -10,7 +10,7 @@ import {
   BiCheckShield, BiBrush, BiShow, BiHelpCircle,
   BiTask, BiBell, BiShield, BiTerminal, BiLogOut, BiX
 } from "react-icons/bi";
-import { FaFileInvoiceDollar, FaMoneyBill } from 'react-icons/fa6';
+import { FaBoxesStacked, FaFileInvoiceDollar, FaMoneyBill } from 'react-icons/fa6';
 import { FaQuoteLeft } from 'react-icons/fa';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -158,6 +158,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
            {/* TECHNICAL */}
            {(isOpen || isMobile) && <p className="px-4 pt-6 pb-2 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Technical</p>}
            <NavItem icon={<BiWrench size={20}/>} label="Maintenance" isOpen={isOpen || isMobile} href="/maintenance" active={pathname === '/maintenance'} />
+           <NavItem icon={<FaBoxesStacked size={18}/>} label="Stock" isOpen={isOpen || isMobile} href="/stock" active={pathname === '/stock'} />
 
            {/* FINANCE */}
            {(isOpen || isMobile) && <p className="px-4 pt-6 pb-2 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Finance</p>}
