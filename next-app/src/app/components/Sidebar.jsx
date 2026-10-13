@@ -7,10 +7,11 @@ import { auth, db } from '../Config/firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
 import { 
   BiChevronLeft, BiGridAlt, BiBuildings, BiWrench, 
-  BiCheckShield, BiBrush, BiShow, BiHelpCircle,
-  BiTask, BiBell, BiShield, BiTerminal, BiLogOut, BiX
+  BiCheckShield, BiShow, BiHelpCircle,
+  BiBell, BiShield, BiTerminal, BiLogOut, BiX,
+  BiCommand // Added for Operations Hub
 } from "react-icons/bi";
-import { FaBoxesStacked, FaFileInvoiceDollar, FaMoneyBill } from 'react-icons/fa6';
+import { FaBoxesStacked, FaFileInvoiceDollar } from 'react-icons/fa6';
 import { FaQuoteLeft } from 'react-icons/fa';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -33,7 +34,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
-          // Try to fetch from 'stuff' collection first
           let userDoc = await getDoc(doc(db, "stuff", currentUser.uid));
           
           if (userDoc.exists()) {
@@ -45,7 +45,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
               email: currentUser.email
             });
           } else {
-            // Try owners collection
             userDoc = await getDoc(doc(db, "owners", currentUser.uid));
             if (userDoc.exists()) {
               const data = userDoc.data();
@@ -56,7 +55,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                 email: currentUser.email
               });
             } else {
-              // Try students collection
               userDoc = await getDoc(doc(db, "students", currentUser.uid));
               if (userDoc.exists()) {
                 const data = userDoc.data();
@@ -77,7 +75,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     return () => unsubscribe();
   }, []);
 
-  // 2.1 Client-side auth guard to prevent back navigation showing protected pages
+  // 2.1 Client-side auth guard
   useEffect(() => {
     try {
       const hasAuth = document.cookie.split('; ').some(c => c.startsWith('pulse_auth='));
@@ -92,13 +90,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     if (isMobile) setIsOpen(false);
   }, [pathname, isMobile, setIsOpen]);
 
-  // 3. Logout Function (Redirects to /login)
+  // 3. Logout Function
   const handleLogout = async () => {
     if(!confirm("Sign out of OC Pulse?")) return;
     try {
       await signOut(auth);
     } catch (e) {}
-    // Clear session cookie
     try {
       document.cookie = 'pulse_auth=; Max-Age=0; path=/; SameSite=Lax';
     } catch (e) {}
@@ -150,9 +147,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
            {/* MANAGEMENT */}
            {(isOpen || isMobile) && <p className="px-4 pt-4 pb-2 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Management</p>}
            <NavItem icon={<BiGridAlt size={20}/>} label="Overview" isOpen={isOpen || isMobile} href="/dashboard" active={pathname === '/dashboard'} />
+           
+           {/* 🚀 NEW OPERATIONS / COMMAND HUB LINK */}
+           <NavItem icon={<BiCommand size={20}/>} label="Operations Hub" isOpen={isOpen || isMobile} href="/hub" active={pathname === '/hub'} />
+
            <NavItem icon={<BiBuildings size={20}/>} label="Apartments" isOpen={isOpen || isMobile} href="/apartments" active={pathname === '/apartments'} />
            <NavItem icon={<BiCheckShield size={20}/>} label="Inspections" isOpen={isOpen || isMobile} href="/inspections" active={pathname === '/inspections'} />
-           <NavItem icon={<BiBrush size={20}/>} label="Cleanings" isOpen={isOpen || isMobile} href="/cleanings" active={pathname === '/cleanings'} />
            <NavItem icon={<BiShow size={20}/>} label="Viewings" isOpen={isOpen || isMobile} href="/viewings" active={pathname === '/viewings'} />
 
            {/* TECHNICAL */}
@@ -164,8 +164,6 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
            {(isOpen || isMobile) && <p className="px-4 pt-6 pb-2 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">Finance</p>}
            <NavItem icon={<FaQuoteLeft size={18}/>} label="Quotations" isOpen={isOpen || isMobile} href="/quotations" active={pathname === '/quotations'} />
            <NavItem icon={<FaFileInvoiceDollar size={18}/>} label="Invoicing" isOpen={isOpen || isMobile} href="/invoicing" active={pathname === '/invoicing'} />
-           <NavItem icon={<BiTask size={20}/>} label="Reports" isOpen={isOpen || isMobile} href="/reports" active={pathname === '/reports'} />
-           <NavItem icon={<FaMoneyBill size={20}/>} label="Clearance" isOpen={isOpen || isMobile} href="/clearance" active={pathname === '/clearance'} />
 
            {/* SYSTEM CONTROL */}
            {(['Admin', 'PRINCIPAL', 'TECHNICIAN'].includes(userData.role)) && (
@@ -238,7 +236,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                   </button>
               </div>
            </div>
-         </div>
+        </div>
       )}
     </>
   );
