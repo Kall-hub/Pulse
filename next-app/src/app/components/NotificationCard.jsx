@@ -3,6 +3,8 @@ import { BiBell } from "react-icons/bi";
 
 const NotificationCard = ({ data, onClick }) => {
   const { type, title, message, time, priority, read } = data;
+  // selection props
+  const { showCheckbox, checked, onToggleSelect } = data.__meta || {};
 
   // ICON & COLOR LOGIC
   let icon = <BiBell />;
@@ -32,6 +34,18 @@ const NotificationCard = ({ data, onClick }) => {
         onClick={onClick}
         className={`relative group cursor-pointer p-6 rounded-[1.5rem] border border-slate-100 bg-white shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ${read ? 'opacity-60 grayscale' : 'opacity-100'}`}
     >
+      {showCheckbox && (
+        <div className="absolute right-6 top-4">
+          <input
+            type="checkbox"
+            checked={!!checked}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => { e.stopPropagation(); onToggleSelect && onToggleSelect(!checked); }}
+            className="w-5 h-5 rounded-md border border-slate-200 bg-white shadow-sm cursor-pointer accent-blue-600"
+            aria-label="Select notification"
+          />
+        </div>
+      )}
       {/* LEFT BORDER ACCENT */}
       <div className={`absolute left-0 top-6 bottom-6 w-1 rounded-r-full ${borderClass.split(' ')[1]}`}></div>
 

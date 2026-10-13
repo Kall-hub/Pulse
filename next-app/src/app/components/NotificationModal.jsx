@@ -1,7 +1,7 @@
 import { FaClock, FaFingerprint, FaTrash } from "react-icons/fa";
 import { BiBell, BiX } from "react-icons/bi";
 
-const NotificationModal = ({ data, onClose, onDelete }) => {
+const NotificationModal = ({ data, onClose, onDelete, onAcknowledge }) => {
   if (!data) return null;
 
   return (
@@ -79,7 +79,7 @@ const NotificationModal = ({ data, onClose, onDelete }) => {
            </button>
 
            <button 
-             onClick={onClose}
+             onClick={() => { onAcknowledge?.(data.id); onClose(); }}
              className="px-10 py-4 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] active:scale-95 transition-all"
            >
              Acknowledge
