@@ -249,6 +249,18 @@ export default function OperationsHubPage() {
           .report-ledger thead {
             display: table-header-group;
           }
+          .report-ledger-scroll {
+            overflow: visible !important;
+          }
+          .report-ledger {
+            width: 100% !important;
+            min-width: 0 !important;
+            table-layout: fixed !important;
+          }
+          .report-ledger th:last-child,
+          .report-ledger td:last-child {
+            width: 17% !important;
+          }
           .briefing-report {
             width: 100% !important;
             max-width: none !important;
@@ -532,10 +544,10 @@ export default function OperationsHubPage() {
                       <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-700">Detailed ledger</p><h2 className="text-lg font-black text-slate-900">Tickets worked</h2></div>
                       <p className="text-[10px] font-bold text-slate-500">{reportTickets.length} record{reportTickets.length === 1 ? '' : 's'}</p>
                     </div>
-                    {reportTickets.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No tickets to show for the selected dates.</div> : <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                      <table className="report-ledger w-full min-w-[950px] border-collapse text-left text-[10px]">
+                    {reportTickets.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">No tickets to show for the selected dates.</div> : <div className="report-ledger-scroll overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                      <table className="report-ledger w-full min-w-[1050px] border-collapse text-left text-[10px]">
                         <thead className="bg-slate-900 text-[9px] font-black uppercase tracking-wider text-white"><tr>
-                          <th className="p-3">Date</th><th className="p-3">Property</th><th className="p-3">Ticket No.</th><th className="p-3">Status</th><th className="p-3">Faults</th><th className="p-3">Suppliers</th><th className="p-3 text-right">Invoice</th>
+                          <th className="p-3">Date</th><th className="p-3">Property</th><th className="p-3">Ticket No.</th><th className="p-3">Status</th><th className="p-3">Faults</th><th className="p-3">Suppliers</th><th className="w-[180px] min-w-[180px] p-3 text-right">Invoice</th>
                         </tr></thead>
                         <tbody className="divide-y divide-slate-100 text-slate-700">
                           {reportTickets.map(ticket => {
@@ -553,7 +565,7 @@ export default function OperationsHubPage() {
                               <td className="p-3"><span className={`whitespace-nowrap rounded-full px-2 py-1 text-[8px] font-black uppercase ${isClosed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>{ticket.status || 'Open'}</span></td>
                               <td className="max-w-[240px] p-3 leading-4">{faults}</td>
                               <td className="max-w-[180px] p-3 leading-4">{suppliers}</td>
-                              <td className="whitespace-nowrap p-3 text-right font-bold text-slate-900">{invoice && <span className="mr-1 text-slate-500">{invoice}</span>}{amount ? `R ${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}` : invoice ? '' : '—'}</td>
+                              <td className="w-[180px] min-w-[180px] break-words p-3 text-right font-bold text-slate-900"><div className="text-[9px] text-slate-500">{invoice || 'Invoice not recorded'}</div>{amount > 0 && <div className="mt-1 whitespace-nowrap text-[10px] text-slate-900">R {amount.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}</div>}</td>
                             </tr>;
                           })}
                         </tbody>
