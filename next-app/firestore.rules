@@ -1,0 +1,95 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasRole(roleName) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/stuff/$(request.auth.uid))
+        && get(/databases/$(database)/documents/stuff/$(request.auth.uid)).data.role == roleName;
+    }
+
+    function isPqa() {
+      return hasRole('PQA');
+    }
+
+    function isFinance() {
+      return hasRole('Finance');
+    }
+
+    match /tickets/{ticketId} {
+      // PQA can read unowned legacy tickets to restore them to the PQA account.
+      allow read: if signedIn()
+        && ((('ownerUid' in resource.data) && resource.data.ownerUid == request.auth.uid) || isPqa());
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      allow update: if signedIn() && (
+        (('ownerUid' in resource.data)
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == request.auth.uid)
+        || (isPqa()
+          && !('ownerUid' in resource.data)
+          && request.resource.data.ownerUid == request.auth.uid)
+      );
+
+      allow delete: if signedIn()
+        && ('ownerUid' in resource.data)
+        && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /emailLogs/{logId} {
+      // PQA can read unowned legacy logs to restore them to the PQA account.
+      allow read: if signedIn()
+        && ((('ownerUid' in resource.data) && resource.data.ownerUid == request.auth.uid) || isPqa());
+
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid;
+
+      allow update: if signedIn() && (
+        (('ownerUid' in resource.data)
+          && resource.data.ownerUid == request.auth.uid
+          && request.resource.data.ownerUid == request.auth.uid)
+        || (isPqa()
+          && !('ownerUid' in resource.data)
+          && request.resource.data.ownerUid == request.auth.uid)
+      );
+
+      allow delete: if signedIn()
+        && ((('ownerUid' in resource.data) && resource.data.ownerUid == request.auth.uid) || isPqa());
+    }
+
+    match /financeEntries/{entryId} {
+      allow read: if signedIn()
+        && (resource.data.ownerUid == request.auth.uid || isFinance());
+
+      allow create: if isPqa()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'Pending'
+        && request.resource.data.keys().hasAll([
+          'ticketNumber', 'property', 'description', 'amount', 'billTo',
+          'ownerUid', 'entryDate', 'createdAt', 'status'
+        ]);
+
+      allow update: if isFinance()
+        && request.resource.data.status == 'Done'
+        && request.resource.data.processedByUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'processedAt', 'processedByUid']);
+
+      allow delete: if false;
+    }
+
+    // Keep the existing signed-in app access for every other collection.
+    // Sensitive collections above have their own account and role checks.
+    match /{collection}/{allDocuments=**} {
+      allow read, write: if signedIn()
+        && collection != 'tickets'
+        && collection != 'emailLogs'
+        && collection != 'financeEntries';
+    }
+  }
+}

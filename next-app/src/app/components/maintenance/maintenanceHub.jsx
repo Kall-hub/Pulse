@@ -1,18 +1,46 @@
 import React, { useEffect, useState } from 'react';
 import { FaTools, FaPlus, FaCheckCircle, FaClock, FaPaperPlane, FaTrash } from 'react-icons/fa';
 import { db } from '@/app/Config/firebaseConfig';
-import { addDoc, collection, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+import { auth } from '@/app/Config/firebaseConfig';
+import { addDoc, collection, onSnapshot, updateDoc, deleteDoc, doc, query, where, serverTimestamp, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
 
 export default function MaintenanceHub() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => onSnapshot(collection(db, 'tickets'), (snapshot) => {
-    const loaded = snapshot.docs.map(ticketDoc => {
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState('');
+  useEffect(() => onAuthStateChanged(auth, async currentUser => {
+    setUser(currentUser);
+    if (!currentUser) { setUserRole(''); return; }
+    try {
+      const profile = await getDoc(doc(db, 'stuff', currentUser.uid));
+      setUserRole(profile.exists() ? profile.data().role || '' : '');
+    } catch (err) { console.error('Failed to load maintenance account role:', err); setUserRole(''); }
+  }), []);
+
+  useEffect(() => {
+    if (!user) { setTickets([]); setLoading(false); return; }
+    setLoading(true);
+    const ticketsQuery = userRole === 'PQA'
+      ? collection(db, 'tickets')
+      : query(collection(db, 'tickets'), where('ownerUid', '==', user.uid));
+    return onSnapshot(ticketsQuery, (snapshot) => {
+    const visibleTickets = userRole === 'PQA'
+      ? snapshot.docs.filter(ticketDoc => !ticketDoc.data().ownerUid || ticketDoc.data().ownerUid === user.uid)
+      : snapshot.docs;
+    const loaded = visibleTickets.map(ticketDoc => {
       const data = ticketDoc.data();
+      if (userRole === 'PQA' && !data.ownerUid) {
+        updateDoc(doc(db, 'tickets', ticketDoc.id), { ownerUid: user.uid }).catch(migrationError => {
+          console.error('Could not restore legacy ticket ownership:', migrationError);
+        });
+      }
       return {
         ...data,
+        ownerUid: data.ownerUid || (userRole === 'PQA' ? user.uid : ''),
         status: data.status || 'Open',
         amount: Number(data.amount) || 0,
         invoiceNumber: data.invoiceNumber || '',
@@ -29,7 +57,8 @@ export default function MaintenanceHub() {
     console.error('Failed to load maintenance tickets:', loadError);
     setError('Maintenance tickets could not be loaded. Please try again.');
     setLoading(false);
-  }), []);
+  });
+  }, [user, userRole]);
 
   const [isCreating, setIsCreating] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState(null);
@@ -57,7 +86,7 @@ export default function MaintenanceHub() {
   const [selectedTag, setSelectedTag] = useState('email sent to owner');
 
   const availableTags = [
-    'email sent to marketing', 'email sent to finance', 'email sent to tenant', 
+    'ticket logged', 'email sent to marketing', 'email sent to finance', 'email sent to tenant',
     'email sent to owner', 'create a quote', 'quote sent', 'create invoice', 
     'invoice sent to finance', 'ticket maintenance sorted', 'ticket maintenance postponed', 
     'waiting for owner', 'waiting for tenant'
@@ -84,11 +113,13 @@ export default function MaintenanceHub() {
   const handleCreateTicket = async (e) => {
     e.preventDefault();
     const cleanFaults = newTicket.faults.map(f => f.trim()).filter(Boolean);
-    if (!newTicket.property || cleanFaults.length === 0) return;
+    if (!user || !newTicket.property || cleanFaults.length === 0) return;
 
     const chosenSupplier = newTicket.supplier.trim();
 
     const created = {
+      ownerUid: user.uid,
+      createdAt: serverTimestamp(),
       displayId: newTicket.ticketNumber.trim() || `TCK-${Date.now()}`,
       property: newTicket.property,
       faults: cleanFaults,
@@ -99,7 +130,7 @@ export default function MaintenanceHub() {
       suppliersList: chosenSupplier ? [{ id: Date.now(), name: chosenSupplier, visits: 1 }] : [],
       contractor: newTicket.contractor.trim(),
       trail: [
-        { id: Date.now(), type: 'note', text: `Ticket logged with ${cleanFaults.length} initial fault(s).`, timestamp: new Date().toLocaleString('en-ZA'), tag: 'create a quote' }
+        { id: Date.now(), type: 'note', text: `Ticket logged with ${cleanFaults.length} initial fault(s).`, timestamp: new Date().toLocaleString('en-ZA'), tag: 'ticket logged' }
       ]
     };
 
@@ -123,6 +154,24 @@ export default function MaintenanceHub() {
     } catch (saveError) {
       console.error('Failed to update maintenance ticket:', saveError);
       setError('Ticket update could not be saved. Please try again.');
+    }
+  };
+
+  const handleDeleteTicket = async (event, ticket) => {
+    event.stopPropagation();
+    if (!user || ticket.ownerUid !== user.uid) return;
+    if (!window.confirm(`Delete ticket ${ticket.displayId || ticket.id} for ${ticket.property}? This cannot be undone.`)) return;
+
+    try {
+      const ticketRef = doc(db, 'tickets', ticket.id);
+      // Claim older PQA-created records before deleting them under the owner rule.
+      if (userRole === 'PQA') await updateDoc(ticketRef, { ownerUid: user.uid });
+      await deleteDoc(ticketRef);
+      if (selectedTicketId === ticket.id) setSelectedTicketId(null);
+      setError('');
+    } catch (deleteError) {
+      console.error('Failed to delete maintenance ticket:', deleteError);
+      setError('Ticket could not be deleted. Please try again.');
     }
   };
 
@@ -283,16 +332,25 @@ export default function MaintenanceHub() {
                       : 'border-gray-100 bg-gray-50/40 hover:bg-gray-100/80'
                   }`}
                 >
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start gap-2">
                     <div>
                       <span className="text-[9px] font-mono font-bold text-gray-400">{ticket.displayId || ticket.id}</span>
                       <h5 className="text-[11px] font-bold text-gray-900 leading-tight">{ticket.property}</h5>
                     </div>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                      isOpen ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                    }`}>
-                      {ticket.status}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                        isOpen ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {ticket.status}
+                      </span>
+                      {ticket.ownerUid === user?.uid && <button
+                        type="button"
+                        onClick={event => handleDeleteTicket(event, ticket)}
+                        className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600"
+                        title="Delete this ticket"
+                        aria-label={`Delete ticket ${ticket.displayId || ticket.id}`}
+                      ><FaTrash size={11} /></button>}
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-1">
