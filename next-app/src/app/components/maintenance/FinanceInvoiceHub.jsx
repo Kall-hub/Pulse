@@ -63,6 +63,7 @@ export default function FinanceInvoiceHub() {
   const [entries, setEntries] = useState([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savingEditId, setSavingEditId] = useState(null);
   const [startDate, setStartDate] = useState(() => monthWindowFor().startDate);
   const [endDate, setEndDate] = useState(() => monthWindowFor().endDate);
   const [form, setForm] = useState({ ticketNumber: '', invoiceNumber: '', property: '', description: '', amount: '', billTo: '' });
@@ -178,9 +179,18 @@ export default function FinanceInvoiceHub() {
   };
 
   const saveEdit = async entryId => {
+    if (!entryId) return;
     const amount = Number(editForm.amount);
-    if (!Number.isFinite(amount) || amount < 0) { setError('Enter a valid amount.'); return; }
+    if (!Number.isFinite(amount) || amount < 0) {
+      setError('Enter a valid amount.');
+      return;
+    }
+
+    setSavingEditId(entryId);
+    setError('');
+
     try {
+      const selectedDate = editForm.entryDate || today();
       await updateDoc(doc(db, 'financeEntries', entryId), {
         ticketNumber: editForm.ticketNumber.trim(),
         invoiceNumber: editForm.invoiceNumber.trim(),
@@ -188,12 +198,16 @@ export default function FinanceInvoiceHub() {
         description: editForm.description.trim(),
         amount,
         billTo: editForm.billTo.trim(),
-        entryDate: editForm.entryDate || today()
+        entryDate: selectedDate
       });
-      await ensureMonthDocument(editForm.entryDate || today());
+      await ensureMonthDocument(selectedDate);
       setEditingId(null);
-      setError('');
-    } catch (err) { console.error('Could not update finance entry:', err); setError('Entry could not be updated.'); }
+    } catch (err) {
+      console.error('Could not update finance entry:', err);
+      setError('Entry could not be updated.');
+    } finally {
+      setSavingEditId(null);
+    }
   };
 
   const handleDelete = async entry => {
@@ -231,7 +245,7 @@ export default function FinanceInvoiceHub() {
     const popup = window.open('', '_blank', 'width=1000,height=750');
     if (!popup) { setError('Allow pop-ups to print invoices.'); return; }
     popup.document.write(`<!doctype html><html><head><title>Finance invoices</title><style>
-      body{font:14px Arial,sans-serif;padding:24px;color:#111}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:left}thead th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#475569}.total{font-weight:700;margin-top:12px}</style></head><body><h1>Finance invoices</h1><table><thead><tr><th>Entry date</th><th>Ticket</th><th>Invoice</th><th>Property</th><th>Description</th><th>Amount</th><th>Bill to</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+      body{font:14px Arial,sans-serif;padding:24px;color:#111}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:left}thead th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#475569}</style></head><body><h1>Finance invoices</h1><table><thead><tr><th>Entry date</th><th>Ticket</th><th>Invoice</th><th>Property</th><th>Description</th><th>Amount</th><th>Bill to</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
     popup.document.close();
   };
 
@@ -248,7 +262,7 @@ export default function FinanceInvoiceHub() {
         <input className={`${inputClass} md:col-span-2`} placeholder="Description" required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
         <input className={`${inputClass} md:col-span-2`} placeholder="Bill to" required value={form.billTo} onChange={e => setForm({ ...form, billTo: e.target.value })} />
       </div>
-      <button disabled={saving || !user} className="rounded-xl bg-blue-600 px-5 py-3 text-xs font-black uppercase tracking-wider text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save invoice entry'}</button>
+      <button type="submit" disabled={saving || !user} className="rounded-xl bg-blue-600 px-5 py-3 text-xs font-black uppercase tracking-wider text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save invoice entry'}</button>
       {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
     </form>}
 
@@ -307,7 +321,7 @@ export default function FinanceInvoiceHub() {
                         </td>
                         <td className="p-2 align-top">
                           <div className="flex justify-end gap-2">
-                            <button type="button" onClick={() => saveEdit(entry.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white">Save</button>
+                            <button type="button" disabled={savingEditId === entry.id} onClick={() => saveEdit(entry.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-60">{savingEditId === entry.id ? 'Saving…' : 'Save'}</button>
                             <button type="button" onClick={() => setEditingId(null)} className="rounded-lg bg-slate-700 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white">Cancel</button>
                           </div>
                         </td>
