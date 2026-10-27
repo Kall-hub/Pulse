@@ -50,10 +50,7 @@ const monthWindowFor = (date = new Date()) => {
     return `${yearValue}-${monthValue}-${dayValue}`;
   };
 
-  return {
-    startDate: formatDate(startDate),
-    endDate: formatDate(endDate)
-  };
+  return { startDate: formatDate(startDate), endDate: formatDate(endDate) };
 };
 
 export default function FinanceInvoiceHub() {
@@ -78,20 +75,32 @@ export default function FinanceInvoiceHub() {
       const role = profile.exists() ? profile.data().role : '';
       setIsFinance(role === 'Finance');
       setIsPqa(role === 'PQA');
-    } catch (err) { console.error('Could not load account role:', err); setIsFinance(false); setIsPqa(false); }
+    } catch (err) {
+      console.error('Could not load account role:', err);
+      setIsFinance(false);
+      setIsPqa(false);
+    }
   }), []);
 
   useEffect(() => {
-    if (!user) { setEntries([]); return; }
+    if (!user) {
+      setEntries([]);
+      return;
+    }
+
     const entriesQuery = isFinance
       ? collection(db, 'financeEntries')
       : query(collection(db, 'financeEntries'), where('ownerUid', '==', user.uid));
+
     return onSnapshot(entriesQuery, snapshot => {
       const loaded = snapshot.docs.map(entry => ({ id: entry.id, ...entry.data() }));
       loaded.sort((a, b) => String(b.entryDate || '').localeCompare(String(a.entryDate || '')));
       setEntries(loaded);
       setError('');
-    }, err => { console.error('Could not load finance entries:', err); setError('Finance entries could not be loaded.'); });
+    }, err => {
+      console.error('Could not load finance entries:', err);
+      setError('Finance entries could not be loaded.');
+    });
   }, [user, isFinance]);
 
   const ensureMonthDocument = async (entryDate) => {
@@ -140,8 +149,10 @@ export default function FinanceInvoiceHub() {
   const submit = async event => {
     event.preventDefault();
     if (!user || !isPqa) { setError('Only PQA accounts can create invoice entries.'); return; }
+
     const amount = Number(form.amount);
     if (!Number.isFinite(amount) || amount < 0) { setError('Enter a valid amount.'); return; }
+
     const entryDate = today();
     setSaving(true);
     try {
@@ -155,14 +166,19 @@ export default function FinanceInvoiceHub() {
         createdAt: serverTimestamp(),
         status: 'Pending'
       });
+
       await ensureMonthDocument(entryDate);
       if (!startDate || !endDate || entryDate < startDate || entryDate > endDate) {
         resetToThisMonth();
       }
       setForm({ ticketNumber: '', invoiceNumber: '', property: '', description: '', amount: '', billTo: '' });
       setError('');
-    } catch (err) { console.error('Could not save finance entry:', err); setError('Invoice entry could not be saved.'); }
-    finally { setSaving(false); }
+    } catch (err) {
+      console.error('Could not save finance entry:', err);
+      setError('Invoice entry could not be saved.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const startEdit = entry => {
@@ -180,6 +196,7 @@ export default function FinanceInvoiceHub() {
 
   const saveEdit = async entryId => {
     if (!entryId) return;
+
     const amount = Number(editForm.amount);
     if (!Number.isFinite(amount) || amount < 0) {
       setError('Enter a valid amount.');
@@ -191,7 +208,8 @@ export default function FinanceInvoiceHub() {
 
     try {
       const selectedDate = editForm.entryDate || today();
-      await updateDoc(doc(db, 'financeEntries', entryId), {
+      const entryDoc = doc(db, 'financeEntries', entryId);
+      await updateDoc(entryDoc, {
         ticketNumber: editForm.ticketNumber.trim(),
         invoiceNumber: editForm.invoiceNumber.trim(),
         property: editForm.property.trim(),
@@ -243,7 +261,11 @@ export default function FinanceInvoiceHub() {
     }).join('');
 
     const popup = window.open('', '_blank', 'width=1000,height=750');
-    if (!popup) { setError('Allow pop-ups to print invoices.'); return; }
+    if (!popup) {
+      setError('Allow pop-ups to print invoices.');
+      return;
+    }
+
     popup.document.write(`<!doctype html><html><head><title>Finance invoices</title><style>
       body{font:14px Arial,sans-serif;padding:24px;color:#111}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:left}thead th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#475569}</style></head><body><h1>Finance invoices</h1><table><thead><tr><th>Entry date</th><th>Ticket</th><th>Invoice</th><th>Property</th><th>Description</th><th>Amount</th><th>Bill to</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
     popup.document.close();
@@ -268,7 +290,10 @@ export default function FinanceInvoiceHub() {
 
     <section className="rounded-3xl border border-white/5 bg-slate-800/40 p-6 space-y-5">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div><h3 className="text-sm font-black uppercase tracking-wider">{isFinance ? 'All invoice entries' : 'My invoice entries'}</h3><p className="mt-1 text-xs text-slate-400">Showing data for the selected month. Use the dates below to switch periods or reset back to this month.</p></div>
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-wider">{isFinance ? 'All invoice entries' : 'My invoice entries'}</h3>
+          <p className="mt-1 text-xs text-slate-400">Showing data for the selected month. Use the dates below to switch periods or reset back to this month.</p>
+        </div>
         <div className="flex flex-wrap items-end gap-2">
           <button type="button" onClick={resetToThisMonth} className="rounded-xl border border-blue-400/50 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-200">This month</button>
           <label className="text-[10px] font-bold uppercase text-slate-400">From<input className={`${inputClass} mt-1`} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></label>
