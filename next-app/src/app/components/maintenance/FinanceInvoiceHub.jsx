@@ -16,7 +16,7 @@ import {
   where
 } from 'firebase/firestore';
 import { auth, db } from '@/app/Config/firebaseConfig';
-import { BiPrinter } from 'react-icons/bi';
+import { BiPrinter, BiPencil, BiTrash } from 'react-icons/bi';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const printable = (value) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -37,6 +37,24 @@ const money = (value) => {
   if (!Number.isFinite(amount)) return 'R0.00';
   return `R${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
+const monthWindowFor = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const startDate = new Date(year, month, 1);
+  const endDate = new Date(year, month + 1, 0);
+
+  const formatDate = (value) => {
+    const yearValue = value.getFullYear();
+    const monthValue = String(value.getMonth() + 1).padStart(2, '0');
+    const dayValue = String(value.getDate()).padStart(2, '0');
+    return `${yearValue}-${monthValue}-${dayValue}`;
+  };
+
+  return {
+    startDate: formatDate(startDate),
+    endDate: formatDate(endDate)
+  };
+};
 
 export default function FinanceInvoiceHub() {
   const [user, setUser] = useState(null);
@@ -45,8 +63,8 @@ export default function FinanceInvoiceHub() {
   const [entries, setEntries] = useState([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => monthWindowFor().startDate);
+  const [endDate, setEndDate] = useState(() => monthWindowFor().endDate);
   const [form, setForm] = useState({ ticketNumber: '', invoiceNumber: '', property: '', description: '', amount: '', billTo: '' });
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ ticketNumber: '', invoiceNumber: '', property: '', description: '', amount: '', billTo: '', entryDate: today() });
@@ -112,6 +130,12 @@ export default function FinanceInvoiceHub() {
 
   const canManageEntry = entry => isFinance || entry.ownerUid === user?.uid;
 
+  const resetToThisMonth = () => {
+    const { startDate: monthStart, endDate: monthEnd } = monthWindowFor();
+    setStartDate(monthStart);
+    setEndDate(monthEnd);
+  };
+
   const submit = async event => {
     event.preventDefault();
     if (!user || !isPqa) { setError('Only PQA accounts can create invoice entries.'); return; }
@@ -131,6 +155,9 @@ export default function FinanceInvoiceHub() {
         status: 'Pending'
       });
       await ensureMonthDocument(entryDate);
+      if (!startDate || !endDate || entryDate < startDate || entryDate > endDate) {
+        resetToThisMonth();
+      }
       setForm({ ticketNumber: '', invoiceNumber: '', property: '', description: '', amount: '', billTo: '' });
       setError('');
     } catch (err) { console.error('Could not save finance entry:', err); setError('Invoice entry could not be saved.'); }
@@ -204,8 +231,7 @@ export default function FinanceInvoiceHub() {
     const popup = window.open('', '_blank', 'width=1000,height=750');
     if (!popup) { setError('Allow pop-ups to print invoices.'); return; }
     popup.document.write(`<!doctype html><html><head><title>Finance invoices</title><style>
-      body{font:14px Arial,sans-serif;padding:24px;color:#111}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:top;word-wrap:break-word;white-space:normal}th{background:#f3f4f6;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#374151}td{font-size:12px}
-    </style></head><body><h1>Finance invoices</h1><table><thead><tr><th>Entry date</th><th>Ticket</th><th>Invoice</th><th>Property</th><th>Description</th><th>Amount</th><th>Bill to</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+      body{font:14px Arial,sans-serif;padding:24px;color:#111}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:left}thead th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#475569}.total{font-weight:700;margin-top:12px}</style></head><body><h1>Finance invoices</h1><table><thead><tr><th>Entry date</th><th>Ticket</th><th>Invoice</th><th>Property</th><th>Description</th><th>Amount</th><th>Bill to</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
     popup.document.close();
   };
 
@@ -228,11 +254,12 @@ export default function FinanceInvoiceHub() {
 
     <section className="rounded-3xl border border-white/5 bg-slate-800/40 p-6 space-y-5">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div><h3 className="text-sm font-black uppercase tracking-wider">{isFinance ? 'All invoice entries' : 'My invoice entries'}</h3><p className="mt-1 text-xs text-slate-400">Filter by entry date for the invoice list below.</p></div>
+        <div><h3 className="text-sm font-black uppercase tracking-wider">{isFinance ? 'All invoice entries' : 'My invoice entries'}</h3><p className="mt-1 text-xs text-slate-400">Showing data for the selected month. Use the dates below to switch periods or reset back to this month.</p></div>
         <div className="flex flex-wrap items-end gap-2">
+          <button type="button" onClick={resetToThisMonth} className="rounded-xl border border-blue-400/50 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-200">This month</button>
           <label className="text-[10px] font-bold uppercase text-slate-400">From<input className={`${inputClass} mt-1`} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></label>
           <label className="text-[10px] font-bold uppercase text-slate-400">To<input className={`${inputClass} mt-1`} type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></label>
-          <button onClick={printEntries} type="button" className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase text-white"><BiPrinter /> Print</button>
+          <button onClick={printEntries} type="button" className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase text-white"><BiPrinter className="h-4 w-4" /> Print</button>
         </div>
       </div>
 
@@ -274,7 +301,7 @@ export default function FinanceInvoiceHub() {
                         <td className="p-2 align-top"><input className={inputClass} type="number" min="0" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: e.target.value })} /></td>
                         <td className="p-2 align-top"><input className={inputClass} value={editForm.billTo} onChange={e => setEditForm({ ...editForm, billTo: e.target.value })} /></td>
                         <td className="p-2 align-top">
-                          <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${entry.status === 'Done' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                          <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${entry.status === 'Done' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-200'}`}>
                             {entry.status}
                           </span>
                         </td>
@@ -298,7 +325,7 @@ export default function FinanceInvoiceHub() {
                       <td className="whitespace-nowrap p-3 align-top text-right font-semibold text-emerald-300">{money(entry.amount)}</td>
                       <td className="p-3 align-top">{entry.billTo}</td>
                       <td className="whitespace-nowrap p-3 align-top">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${entry.status === 'Done' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${entry.status === 'Done' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-200'}`}>
                           {entry.status}
                         </span>
                       </td>
@@ -306,8 +333,8 @@ export default function FinanceInvoiceHub() {
                         <div className="flex justify-end gap-2">
                           {canModify && (
                             <>
-                              <button type="button" onClick={() => startEdit(entry)} className="rounded-lg bg-amber-500 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-950">Edit</button>
-                              <button type="button" onClick={() => handleDelete(entry)} className="rounded-lg bg-rose-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white">Delete</button>
+                              <button type="button" aria-label={`Edit invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => startEdit(entry)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-slate-950 transition hover:bg-amber-400"><BiPencil className="h-4 w-4" /></button>
+                              <button type="button" aria-label={`Delete invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => handleDelete(entry)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-600 text-white transition hover:bg-rose-500"><BiTrash className="h-4 w-4" /></button>
                             </>
                           )}
                           {isFinance && entry.status !== 'Done' && (
