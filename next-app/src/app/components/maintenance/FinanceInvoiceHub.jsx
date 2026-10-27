@@ -42,14 +42,12 @@ const monthWindowFor = (date = new Date()) => {
   const month = date.getMonth();
   const startDate = new Date(year, month, 1);
   const endDate = new Date(year, month + 1, 0);
-
   const formatDate = (value) => {
     const yearValue = value.getFullYear();
     const monthValue = String(value.getMonth() + 1).padStart(2, '0');
     const dayValue = String(value.getDate()).padStart(2, '0');
     return `${yearValue}-${monthValue}-${dayValue}`;
   };
-
   return { startDate: formatDate(startDate), endDate: formatDate(endDate) };
 };
 
@@ -63,13 +61,33 @@ export default function FinanceInvoiceHub() {
   const [savingEditId, setSavingEditId] = useState(null);
   const [startDate, setStartDate] = useState(() => monthWindowFor().startDate);
   const [endDate, setEndDate] = useState(() => monthWindowFor().endDate);
-  const [form, setForm] = useState({ ticketNumber: '', invoiceNumber: '', property: '', description: '', amount: '', billTo: '' });
+  const [form, setForm] = useState({
+    ticketNumber: '',
+    invoiceNumber: '',
+    property: '',
+    description: '',
+    amount: '',
+    billTo: ''
+  });
   const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({ ticketNumber: '', invoiceNumber: '', property: '', description: '', amount: '', billTo: '', entryDate: today() });
+  const [editForm, setEditForm] = useState({
+    ticketNumber: '',
+    invoiceNumber: '',
+    property: '',
+    description: '',
+    amount: '',
+    billTo: '',
+    entryDate: today()
+  });
 
   useEffect(() => onAuthStateChanged(auth, async currentUser => {
     setUser(currentUser);
-    if (!currentUser) { setIsFinance(false); setIsPqa(false); return; }
+    if (!currentUser) {
+      setIsFinance(false);
+      setIsPqa(false);
+      return;
+    }
+
     try {
       const profile = await getDoc(doc(db, 'stuff', currentUser.uid));
       const role = profile.exists() ? profile.data().role : '';
@@ -148,13 +166,20 @@ export default function FinanceInvoiceHub() {
 
   const submit = async event => {
     event.preventDefault();
-    if (!user || !isPqa) { setError('Only PQA accounts can create invoice entries.'); return; }
+    if (!user || !isPqa) {
+      setError('Only PQA accounts can create invoice entries.');
+      return;
+    }
 
     const amount = Number(form.amount);
-    if (!Number.isFinite(amount) || amount < 0) { setError('Enter a valid amount.'); return; }
+    if (!Number.isFinite(amount) || amount < 0) {
+      setError('Enter a valid amount.');
+      return;
+    }
 
     const entryDate = today();
     setSaving(true);
+
     try {
       await addDoc(collection(db, 'financeEntries'), {
         ...form,
@@ -208,8 +233,7 @@ export default function FinanceInvoiceHub() {
 
     try {
       const selectedDate = editForm.entryDate || today();
-      const entryDoc = doc(db, 'financeEntries', entryId);
-      await updateDoc(entryDoc, {
+      await updateDoc(doc(db, 'financeEntries', entryId), {
         ticketNumber: editForm.ticketNumber.trim(),
         invoiceNumber: editForm.invoiceNumber.trim(),
         property: editForm.property.trim(),
@@ -233,7 +257,10 @@ export default function FinanceInvoiceHub() {
     try {
       await deleteDoc(doc(db, 'financeEntries', entry.id));
       setError('');
-    } catch (err) { console.error('Could not delete finance entry:', err); setError('Entry could not be deleted.'); }
+    } catch (err) {
+      console.error('Could not delete finance entry:', err);
+      setError('Entry could not be deleted.');
+    }
   };
 
   const markDone = async entry => {
@@ -242,7 +269,10 @@ export default function FinanceInvoiceHub() {
       await updateDoc(doc(db, 'financeEntries', entry.id), {
         status: 'Done', processedAt: serverTimestamp(), processedByUid: user.uid
       });
-    } catch (err) { console.error('Could not process finance entry:', err); setError('Entry could not be marked done.'); }
+    } catch (err) {
+      console.error('Could not process finance entry:', err);
+      setError('Entry could not be marked done.');
+    }
   };
 
   const printEntries = () => {
@@ -273,122 +303,159 @@ export default function FinanceInvoiceHub() {
 
   const inputClass = 'w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-blue-400 focus:outline-none';
 
-  return <div className="space-y-6">
-    {isPqa && <form onSubmit={submit} className="rounded-3xl border border-white/5 bg-slate-800/40 p-6 space-y-4">
-      <div><h3 className="text-sm font-black uppercase tracking-wider">New invoice entry</h3><p className="mt-1 text-xs text-slate-400">Entries are visible to you and the Finance team.</p></div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <input className={inputClass} placeholder="Ticket number" required value={form.ticketNumber} onChange={e => setForm({ ...form, ticketNumber: e.target.value })} />
-        <input className={inputClass} placeholder="Invoice number" required value={form.invoiceNumber} onChange={e => setForm({ ...form, invoiceNumber: e.target.value })} />
-        <input className={inputClass} placeholder="Property" required value={form.property} onChange={e => setForm({ ...form, property: e.target.value })} />
-        <input className={inputClass} placeholder="Amount (R)" type="number" min="0" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-        <input className={`${inputClass} md:col-span-2`} placeholder="Description" required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-        <input className={`${inputClass} md:col-span-2`} placeholder="Bill to" required value={form.billTo} onChange={e => setForm({ ...form, billTo: e.target.value })} />
-      </div>
-      <button type="submit" disabled={saving || !user} className="rounded-xl bg-blue-600 px-5 py-3 text-xs font-black uppercase tracking-wider text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save invoice entry'}</button>
-      {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
-    </form>}
-
-    <section className="rounded-3xl border border-white/5 bg-slate-800/40 p-6 space-y-5">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <h3 className="text-sm font-black uppercase tracking-wider">{isFinance ? 'All invoice entries' : 'My invoice entries'}</h3>
-          <p className="mt-1 text-xs text-slate-400">Showing data for the selected month. Use the dates below to switch periods or reset back to this month.</p>
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <button type="button" onClick={resetToThisMonth} className="rounded-xl border border-blue-400/50 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-200">This month</button>
-          <label className="text-[10px] font-bold uppercase text-slate-400">From<input className={`${inputClass} mt-1`} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></label>
-          <label className="text-[10px] font-bold uppercase text-slate-400">To<input className={`${inputClass} mt-1`} type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></label>
-          <button onClick={printEntries} type="button" className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase text-white"><BiPrinter className="h-4 w-4" /> Print</button>
-        </div>
-      </div>
-
-      {groupedEntries.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-slate-900/30 p-8 text-center text-slate-400">No invoice entries for this date range.</div>
-      ) : groupedEntries.map(monthGroup => (
-        <div key={monthGroup.key} className="rounded-2xl border border-white/10 bg-slate-900/30">
-          <div className="border-b border-white/10 bg-slate-950/50 px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-300">
-            {monthGroup.label}
+  return (
+    <div className="space-y-6">
+      {isPqa && (
+        <form onSubmit={submit} className="rounded-3xl border border-white/5 bg-slate-800/40 p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wider">New invoice entry</h3>
+            <p className="mt-1 text-xs text-slate-400">Entries are visible to you and the Finance team.</p>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed border-collapse text-left text-xs">
-              <thead className="bg-slate-950/60 text-[10px] uppercase tracking-wider text-slate-400">
-                <tr>
-                  <th className="p-3">Entry date</th>
-                  <th className="p-3">Ticket</th>
-                  <th className="p-3">Invoice</th>
-                  <th className="p-3">Property</th>
-                  <th className="p-3">Description</th>
-                  <th className="p-3 text-right">Amount</th>
-                  <th className="p-3">Bill to</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5 align-top">
-                {monthGroup.entries.map(entry => {
-                  const rowIsEditing = editingId === entry.id;
-                  const canModify = canManageEntry(entry);
 
-                  if (rowIsEditing) {
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <input className={inputClass} placeholder="Ticket number" required value={form.ticketNumber} onChange={e => setForm({ ...form, ticketNumber: e.target.value })} />
+            <input className={inputClass} placeholder="Invoice number" required value={form.invoiceNumber} onChange={e => setForm({ ...form, invoiceNumber: e.target.value })} />
+            <input className={inputClass} placeholder="Property" required value={form.property} onChange={e => setForm({ ...form, property: e.target.value })} />
+            <input className={inputClass} placeholder="Amount (R)" type="number" min="0" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+            <input className={`${inputClass} md:col-span-2`} placeholder="Description" required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+            <input className={`${inputClass} md:col-span-2`} placeholder="Bill to" required value={form.billTo} onChange={e => setForm({ ...form, billTo: e.target.value })} />
+          </div>
+
+          <button type="submit" disabled={saving || !user} className="rounded-xl bg-blue-600 px-5 py-3 text-xs font-black uppercase tracking-wider text-white disabled:opacity-50">
+            {saving ? 'Saving…' : 'Save invoice entry'}
+          </button>
+
+          {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
+        </form>
+      )}
+
+      <section className="rounded-3xl border border-white/5 bg-slate-800/40 p-6 space-y-5">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <h3 className="text-sm font-black uppercase tracking-wider">{isFinance ? 'All invoice entries' : 'My invoice entries'}</h3>
+            <p className="mt-1 text-xs text-slate-400">Showing data for the selected month. Use the dates below to switch periods or reset back to this month.</p>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2">
+            <button type="button" onClick={resetToThisMonth} className="rounded-xl border border-blue-400/50 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-200">
+              This month
+            </button>
+            <label className="text-[10px] font-bold uppercase text-slate-400">
+              From
+              <input className={`${inputClass} mt-1`} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </label>
+            <label className="text-[10px] font-bold uppercase text-slate-400">
+              To
+              <input className={`${inputClass} mt-1`} type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </label>
+            <button type="button" onClick={printEntries} className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase text-white">
+              <BiPrinter className="h-4 w-4" /> Print
+            </button>
+          </div>
+        </div>
+
+        {groupedEntries.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-slate-900/30 p-8 text-center text-slate-400">
+            No invoice entries for this date range.
+          </div>
+        ) : groupedEntries.map(monthGroup => (
+          <div key={monthGroup.key} className="rounded-2xl border border-white/10 bg-slate-900/30">
+            <div className="border-b border-white/10 bg-slate-950/50 px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-300">
+              {monthGroup.label}
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed border-collapse text-left text-xs">
+                <thead className="bg-slate-950/60 text-[10px] uppercase tracking-wider text-slate-400">
+                  <tr>
+                    <th className="p-3">Entry date</th>
+                    <th className="p-3">Ticket</th>
+                    <th className="p-3">Invoice</th>
+                    <th className="p-3">Property</th>
+                    <th className="p-3">Description</th>
+                    <th className="p-3 text-right">Amount</th>
+                    <th className="p-3">Bill to</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-white/5 align-top">
+                  {monthGroup.entries.map(entry => {
+                    const rowIsEditing = editingId === entry.id;
+                    const canModify = canManageEntry(entry);
+
+                    if (rowIsEditing) {
+                      return (
+                        <tr key={entry.id} className="align-top">
+                          <td className="p-2 align-top"><input className={inputClass} type="date" value={editForm.entryDate} onChange={e => setEditForm({ ...editForm, entryDate: e.target.value })} /></td>
+                          <td className="p-2 align-top"><input className={inputClass} value={editForm.ticketNumber} onChange={e => setEditForm({ ...editForm, ticketNumber: e.target.value })} /></td>
+                          <td className="p-2 align-top"><input className={inputClass} value={editForm.invoiceNumber} onChange={e => setEditForm({ ...editForm, invoiceNumber: e.target.value })} /></td>
+                          <td className="p-2 align-top"><input className={inputClass} value={editForm.property} onChange={e => setEditForm({ ...editForm, property: e.target.value })} /></td>
+                          <td className="p-2 align-top"><textarea className={`${inputClass} min-h-[72px]`} value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} /></td>
+                          <td className="p-2 align-top"><input className={inputClass} type="number" min="0" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: e.target.value })} /></td>
+                          <td className="p-2 align-top"><input className={inputClass} value={editForm.billTo} onChange={e => setEditForm({ ...editForm, billTo: e.target.value })} /></td>
+                          <td className="p-2 align-top">
+                            <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${entry.status === 'Done' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-200'}`}>
+                              {entry.status}
+                            </span>
+                          </td>
+                          <td className="p-2 align-top">
+                            <div className="flex justify-end gap-2">
+                              <button type="button" disabled={savingEditId === entry.id} onClick={() => saveEdit(entry.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-60">
+                                {savingEditId === entry.id ? 'Saving…' : 'Save'}
+                              </button>
+                              <button type="button" onClick={() => setEditingId(null)} className="rounded-lg bg-slate-700 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white">
+                                Cancel
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }
+
                     return (
                       <tr key={entry.id} className="align-top">
-                        <td className="p-2 align-top"><input className={inputClass} type="date" value={editForm.entryDate} onChange={e => setEditForm({ ...editForm, entryDate: e.target.value })} /></td>
-                        <td className="p-2 align-top"><input className={inputClass} value={editForm.ticketNumber} onChange={e => setEditForm({ ...editForm, ticketNumber: e.target.value })} /></td>
-                        <td className="p-2 align-top"><input className={inputClass} value={editForm.invoiceNumber} onChange={e => setEditForm({ ...editForm, invoiceNumber: e.target.value })} /></td>
-                        <td className="p-2 align-top"><input className={inputClass} value={editForm.property} onChange={e => setEditForm({ ...editForm, property: e.target.value })} /></td>
-                        <td className="p-2 align-top"><textarea className={`${inputClass} min-h-[72px]`} value={editForm.description} onChange={e => setEditForm({ ...editForm, description: e.target.value })} /></td>
-                        <td className="p-2 align-top"><input className={inputClass} type="number" min="0" step="0.01" value={editForm.amount} onChange={e => setEditForm({ ...editForm, amount: e.target.value })} /></td>
-                        <td className="p-2 align-top"><input className={inputClass} value={editForm.billTo} onChange={e => setEditForm({ ...editForm, billTo: e.target.value })} /></td>
-                        <td className="p-2 align-top">
+                        <td className="whitespace-nowrap p-3 align-top">{entry.entryDate}</td>
+                        <td className="whitespace-nowrap p-3 align-top font-mono text-blue-300">{entry.ticketNumber}</td>
+                        <td className="whitespace-nowrap p-3 align-top font-mono text-violet-300">{entry.invoiceNumber || '—'}</td>
+                        <td className="p-3 align-top">{entry.property}</td>
+                        <td className="max-w-[260px] break-words p-3 align-top">{entry.description}</td>
+                        <td className="whitespace-nowrap p-3 align-top text-right font-semibold text-emerald-300">{money(entry.amount)}</td>
+                        <td className="p-3 align-top">{entry.billTo}</td>
+                        <td className="whitespace-nowrap p-3 align-top">
                           <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${entry.status === 'Done' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-200'}`}>
                             {entry.status}
                           </span>
                         </td>
-                        <td className="p-2 align-top">
+                        <td className="p-3 align-top">
                           <div className="flex justify-end gap-2">
-                            <button type="button" disabled={savingEditId === entry.id} onClick={() => saveEdit(entry.id)} className="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-60">{savingEditId === entry.id ? 'Saving…' : 'Save'}</button>
-                            <button type="button" onClick={() => setEditingId(null)} className="rounded-lg bg-slate-700 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white">Cancel</button>
+                            {canModify && (
+                              <>
+                                <button type="button" aria-label={`Edit invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => startEdit(entry)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-slate-950 transition hover:bg-amber-400">
+                                  <BiPencil className="h-4 w-4" />
+                                </button>
+                                <button type="button" aria-label={`Delete invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => handleDelete(entry)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-600 text-white transition hover:bg-rose-500">
+                                  <BiTrash className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                            {isFinance && entry.status !== 'Done' && (
+                              <button type="button" onClick={() => markDone(entry)} className="rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white">
+                                Done
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
                     );
-                  }
-
-                  return (
-                    <tr key={entry.id} className="align-top">
-                      <td className="whitespace-nowrap p-3 align-top">{entry.entryDate}</td>
-                      <td className="whitespace-nowrap p-3 align-top font-mono text-blue-300">{entry.ticketNumber}</td>
-                      <td className="whitespace-nowrap p-3 align-top font-mono text-violet-300">{entry.invoiceNumber || '—'}</td>
-                      <td className="p-3 align-top">{entry.property}</td>
-                      <td className="max-w-[260px] break-words p-3 align-top">{entry.description}</td>
-                      <td className="whitespace-nowrap p-3 align-top text-right font-semibold text-emerald-300">{money(entry.amount)}</td>
-                      <td className="p-3 align-top">{entry.billTo}</td>
-                      <td className="whitespace-nowrap p-3 align-top">
-                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${entry.status === 'Done' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-200'}`}>
-                          {entry.status}
-                        </span>
-                      </td>
-                      <td className="p-3 align-top">
-                        <div className="flex justify-end gap-2">
-                          {canModify && (
-                            <>
-                              <button type="button" aria-label={`Edit invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => startEdit(entry)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-slate-950 transition hover:bg-amber-400"><BiPencil className="h-4 w-4" /></button>
-                              <button type="button" aria-label={`Delete invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => handleDelete(entry)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-600 text-white transition hover:bg-rose-500"><BiTrash className="h-4 w-4" /></button>
-                            </>
-                          )}
-                          {isFinance && entry.status !== 'Done' && (
-                            <button type="button" onClick={() => markDone(entry)} className="rounded-lg bg-blue-600 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-white">Done</button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      ))}
-    </section>
-  </div>;
+        ))}
+      </section>
+    </div>
+  );
 }
