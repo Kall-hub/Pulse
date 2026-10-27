@@ -10,8 +10,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 const printable = (value) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const money = (value) => {
   const amount = Number(value ?? 0);
-  if (!Number.isFinite(amount)) return 'R 0.00';
-  return `R ${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (!Number.isFinite(amount)) return 'R0.00';
+  return `R${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 export default function FinanceInvoiceHub() {
