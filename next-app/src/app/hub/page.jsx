@@ -2,17 +2,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '@/app/components/Sidebar';
 import MaintenanceHub from '@/app/components/maintenance/maintenanceHub';
-import EmailAuditLog from '@/app/components/maintenance/EmailAuditLog';
-import TaskNotebook from '@/app/components/maintenance/TaskNotebook';
-import InspectionForm from '@/app/components/maintenance/InspectionForm';
+import DailyTodoList from '@/app/components/maintenance/DailyTodoList';
+import MaintenanceInsightsReport from '@/app/components/maintenance/MaintenanceInsightsReport';
 import FinanceInvoiceHub from '@/app/components/maintenance/FinanceInvoiceHub';
 import { db, auth } from '@/app/Config/firebaseConfig';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, getDoc } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, query, where, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
   BiWrench, BiDollarCircle, BiChart,
-  BiEnvelope, BiBuildingHouse, BiShieldQuarter,
-  BiPrinter, BiTrash
+  BiListCheck,
+  BiPrinter
 } from 'react-icons/bi';
 
 const toLocalDateInput = (date) => {
@@ -36,9 +35,6 @@ export default function OperationsHubPage() {
   const [isPresentationOpen, setIsPresentationOpen] = useState(false);
 
   // Firestore Data States
-  const [emailLogs, setEmailLogs] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [inspections, setInspections] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
@@ -51,100 +47,30 @@ export default function OperationsHubPage() {
   // Load maintenance figures only for the signed-in Firebase account.
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async user => {
-      if (!user) { setCurrentUser(null); setTickets([]); setEmailLogs([]); setLoadingData(false); return; }
+      if (!user) { setCurrentUser(null); setTickets([]); setLoadingData(false); return; }
       try {
         setCurrentUser(user);
         setTickets([]);
-        setEmailLogs([]);
+
         setLoadingData(true);
         const profile = await getDoc(doc(db, 'stuff', user.uid));
         const isPqa = profile.exists() && profile.data().role === 'PQA';
         const ticketQuery = isPqa ? collection(db, 'tickets') : query(collection(db, 'tickets'), where('ownerUid', '==', user.uid));
-        const logQuery = isPqa ? collection(db, 'emailLogs') : query(collection(db, 'emailLogs'), where('ownerUid', '==', user.uid));
-        const [ticketsSnapshot, logsSnapshot, tasksSnapshot, inspSnapshot] = await Promise.all([
-          getDocs(ticketQuery),
-          getDocs(logQuery),
-          getDocs(collection(db, 'tasks')),
-          getDocs(collection(db, 'inspections'))
-        ]);
+        const ticketsSnapshot = await getDocs(ticketQuery);
         const legacyTickets = isPqa ? ticketsSnapshot.docs.filter(item => !item.data().ownerUid) : [];
-        const legacyLogs = isPqa ? logsSnapshot.docs.filter(item => !item.data().ownerUid) : [];
         await Promise.all([
-          ...legacyTickets.map(item => updateDoc(doc(db, 'tickets', item.id), { ownerUid: user.uid })),
-          ...legacyLogs.map(item => updateDoc(doc(db, 'emailLogs', item.id), { ownerUid: user.uid }))
+          ...legacyTickets.map(item => updateDoc(doc(db, 'tickets', item.id), { ownerUid: user.uid }))
         ]);
         const visibleTickets = isPqa
           ? ticketsSnapshot.docs.filter(item => !item.data().ownerUid || item.data().ownerUid === user.uid)
           : ticketsSnapshot.docs;
-        const visibleLogs = isPqa
-          ? logsSnapshot.docs.filter(item => !item.data().ownerUid || item.data().ownerUid === user.uid)
-          : logsSnapshot.docs;
         setTickets(visibleTickets.map(ticketDoc => ({ id: ticketDoc.id, ...ticketDoc.data(), ...(isPqa && !ticketDoc.data().ownerUid ? { ownerUid: user.uid } : {}) })));
-        setEmailLogs(visibleLogs.map(item => ({ id: item.id, ...item.data(), ...(isPqa && !item.data().ownerUid ? { ownerUid: user.uid } : {}) })));
-        setTasks(tasksSnapshot.docs.map(item => ({ id: item.id, ...item.data() })));
-        setInspections(inspSnapshot.docs.map(item => ({ id: item.id, ...item.data() })));
       } catch (error) {
         console.error('Error fetching Firestore data:', error);
       } finally { setLoadingData(false); }
     });
     return unsubscribe;
   }, []);
-
-  const handleAddEmailLog = async (noteText) => {
-    const nowTime = new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
-    const nowDate = new Date().toISOString().split('T')[0];
-    if (!noteText?.trim()) return;
-    try {
-      if (!currentUser) return;
-      const log = { time: nowTime, date: nowDate, note: noteText.trim(), ownerUid: currentUser.uid };
-      const ref = await addDoc(collection(db, 'emailLogs'), log);
-      setEmailLogs(current => [{ id: ref.id, ...log }, ...current]);
-    }
-    catch (error) { console.error('Failed to save email log:', error); }
-  };
-
-  const handleAddTask = async (newTaskData) => {
-    try {
-      const task = { ...newTaskData, completed: false, timestamp: null };
-      const ref = await addDoc(collection(db, 'tasks'), task);
-      setTasks(current => [{ id: ref.id, ...task }, ...current]);
-    }
-    catch (error) { console.error('Failed to save task:', error); }
-  };
-
-  const toggleTaskCompletion = async (id) => {
-    const task = tasks.find(item => item.id === id);
-    if (!task) return;
-    const now = new Date().toLocaleString('en-ZA', { dateStyle: 'medium', timeStyle: 'short' });
-    try {
-      const completed = !task.completed;
-      await updateDoc(doc(db, 'tasks', id), { completed, timestamp: completed ? now : null });
-      setTasks(current => current.map(item => item.id === id ? { ...item, completed, timestamp: completed ? now : null } : item));
-    }
-    catch (error) { console.error('Failed to update task:', error); }
-  };
-
-  const handleAddInspection = async (newInsp) => {
-    const { id: displayId, ...inspection } = newInsp;
-    try {
-      const ref = await addDoc(collection(db, 'inspections'), { ...inspection, displayId });
-      setInspections(current => [{ id: ref.id, ...inspection, displayId }, ...current]);
-    }
-    catch (error) { console.error('Failed to save inspection:', error); }
-  };
-
-  // --- Safe Deletion Handler with Firestore Sync ---
-  const handleDeleteItem = async (collectionName, id, setStateFn, currentList) => {
-    if (!window.confirm(`Are you sure you want to delete this item from ${collectionName}?`)) return;
-    
-    try {
-      await deleteDoc(doc(db, collectionName, id));
-      setStateFn(current => current.filter(item => item.id !== id));
-    } catch (error) {
-      console.error(`Error deleting from ${collectionName}:`, error);
-      alert('Failed to delete item. Please check console.');
-    }
-  };
 
   const reportRangeValid = reportStartDate && reportEndDate && reportStartDate <= reportEndDate;
   const reportTickets = useMemo(() => tickets
@@ -195,7 +121,7 @@ export default function OperationsHubPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 flex font-sans text-slate-100">
-      
+
       {/* Print CSS Fixes */}
       <style jsx global>{`
         @page { size: landscape; margin: 10mm; }
@@ -280,7 +206,7 @@ export default function OperationsHubPage() {
 
       <main className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'md:ml-64' : 'md:ml-20'} p-6 md:p-10`}>
         <div className="max-w-7xl mx-auto space-y-8">
-          
+
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-800/65 p-6 rounded-3xl border border-white/5 backdrop-blur-md shadow-xl">
             <div>
@@ -289,7 +215,7 @@ export default function OperationsHubPage() {
                 <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">Pulse Operations & Firestore Live Hub</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight italic">Operations & Daily Log</h1>
-              <p className="text-xs text-slate-400 mt-1">Multi-sweep email audit trail, ticket tracking, and verified daily productivity.</p>
+              <p className="text-xs text-slate-400 mt-1">Daily reminders, ticket tracking, and property operations.</p>
             </div>
 
             <button 
@@ -303,13 +229,10 @@ export default function OperationsHubPage() {
           {/* Navigation Tabs */}
           <div className="flex gap-2 border-b border-white/10 pb-4 overflow-x-auto no-scrollbar">
             <button onClick={() => setActiveMainTab('overview')} className={`px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeMainTab === 'overview' ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800 hover:text-white border border-white/5'}`}>
-              <BiEnvelope size={16} /> Smart Overview & Email Logs
+              <BiListCheck size={16} /> Daily To-do
             </button>
             <button onClick={() => setActiveMainTab('maintenance')} className={`px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeMainTab === 'maintenance' ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800 hover:text-white border border-white/5'}`}>
               <BiWrench size={16} /> Maintenance & Ticket Hub
-            </button>
-            <button onClick={() => setActiveMainTab('inspections')} className={`px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeMainTab === 'inspections' ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800 hover:text-white border border-white/5'}`}>
-              <BiShieldQuarter size={16} /> Viewings & Inspections
             </button>
             <button onClick={() => setActiveMainTab('finance')} className={`px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${activeMainTab === 'finance' ? 'bg-blue-600 text-white shadow-lg' : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800 hover:text-white border border-white/5'}`}>
               <BiDollarCircle size={16} /> Finance & Invoices
@@ -318,112 +241,9 @@ export default function OperationsHubPage() {
 
           {/* Tab Content */}
           <div className="transition-all duration-300">
-            {activeMainTab === 'overview' && (
-              <div className="space-y-6">
-                {/* Email Logs with Delete Button Option */}
-                <div className="bg-slate-800/40 border border-white/5 p-6 rounded-3xl space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-black uppercase tracking-wider text-white">Email Audit Logs</h3>
-                    <span className="text-xs text-slate-400">{emailLogs.length} logged entries</span>
-                  </div>
-                  <div className="space-y-2">
-                    {emailLogs.map((log) => (
-                      <div key={log.id} className="flex justify-between items-center bg-slate-900/60 p-3.5 rounded-2xl border border-white/5">
-                        <div>
-                          <p className="text-xs text-white font-medium">{log.note}</p>
-                          <span className="text-[10px] text-slate-400 font-mono">{log.date} at {log.time}</span>
-                        </div>
-                        <button 
-                          onClick={() => handleDeleteItem('emailLogs', log.id, setEmailLogs, emailLogs)}
-                          className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl transition-all"
-                          title="Delete Email Log"
-                        >
-                          <BiTrash size={16} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            {activeMainTab === 'overview' && <DailyTodoList user={currentUser} />}
 
-                <EmailAuditLog emailLogs={emailLogs} onAddLog={handleAddEmailLog} />
-                
-                {/* Task Notebook with Delete Button Option */}
-                <div className="bg-slate-800/40 border border-white/5 p-6 rounded-3xl space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-black uppercase tracking-wider text-white">Tasks Ledger</h3>
-                    <span className="text-xs text-slate-400">{tasks.length} total tasks</span>
-                  </div>
-                  <div className="space-y-2">
-                    {tasks.map((task) => (
-                      <div key={task.id} className="flex justify-between items-center bg-slate-900/60 p-3.5 rounded-2xl border border-white/5">
-                        <div>
-                          <p className={`text-xs font-medium ${task.completed ? 'line-through text-slate-500' : 'text-white'}`}>{task.text}</p>
-                          <span className="text-[10px] text-blue-400 font-mono">{task.property} • {task.issue || 'General'}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => toggleTaskCompletion(task.id)} 
-                            className={`px-3 py-1.5 rounded-xl text-[10px] font-bold ${task.completed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-300'}`}
-                          >
-                            {task.completed ? 'Completed' : 'Mark Done'}
-                          </button>
-                          <button 
-                            onClick={() => handleDeleteItem('tasks', task.id, setTasks, tasks)}
-                            className="p-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-xl transition-all"
-                            title="Delete Task"
-                          >
-                            <BiTrash size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <TaskNotebook tasks={tasks} onAddTask={handleAddTask} onToggleTask={toggleTaskCompletion} />
-              </div>
-            )}
-
-            {activeMainTab === 'maintenance' && <MaintenanceHub />}
-
-            {activeMainTab === 'inspections' && (
-              <div className="space-y-6">
-                <InspectionForm onAddInspection={handleAddInspection} />
-                <div className="bg-slate-800/40 border border-white/5 p-6 rounded-3xl space-y-6 shadow-xl">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h3 className="text-sm font-black uppercase tracking-wider text-white">Recorded Viewings & Inspections Ledger</h3>
-                      <p className="text-xs text-slate-400">Verifiable proof of daily operational workload and property management diligence.</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {inspections.map((item, idx) => (
-                      <div key={item.id || idx} className="bg-slate-900/70 border border-white/5 p-5 rounded-2xl space-y-3 shadow-md relative group">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-full border border-blue-500/20">{item.displayId || item.id}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-emerald-400">{item.status}</span>
-                            <button 
-                              onClick={() => handleDeleteItem('inspections', item.id, setInspections, inspections)}
-                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg transition-all"
-                              title="Delete Inspection Record"
-                            >
-                              <BiTrash size={14} />
-                            </button>
-                          </div>
-                        </div>
-                        <h4 className="text-xs font-black text-white uppercase">{item.type}</h4>
-                        <p className="text-xs text-slate-300 flex items-center gap-1.5"><BiBuildingHouse className="text-slate-400"/> {item.property}</p>
-                        <div className="pt-2 border-t border-white/5 flex justify-between items-center text-[11px] text-slate-400 font-mono">
-                          <span>Date: {item.date}</span>
-                          <span className="text-emerald-300 font-bold">{item.proof}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+            {activeMainTab === 'maintenance' && <MaintenanceHub onTicketsChange={setTickets} />}
 
             {activeMainTab === 'finance' && (
               <div className="bg-slate-800/40 border border-white/5 p-12 rounded-3xl text-center space-y-4">
@@ -442,7 +262,7 @@ export default function OperationsHubPage() {
       {isPresentationOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 animate-in fade-in overflow-y-auto">
           <div className="bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl max-w-5xl w-full overflow-hidden flex flex-col my-8 max-h-[92vh]">
-            
+
             <div className="p-6 md:p-8 border-b border-white/10 bg-slate-800/50 flex justify-between items-center print:hidden flex-shrink-0">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Maintenance performance report</span>
@@ -484,8 +304,8 @@ export default function OperationsHubPage() {
                     <div className="flex flex-wrap items-start justify-between gap-5">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Pulse · Operations</p>
-                        <h1 className="mt-3 text-3xl font-black tracking-tight md:text-4xl">Ticket Activity Report</h1>
-                        <p className="mt-2 text-sm text-blue-100">A date based summary of maintenance work and supplier activity.</p>
+                        <h1 className="mt-3 text-3xl font-black tracking-tight md:text-4xl">Maintenance Intelligence</h1>
+                        <p className="mt-2 text-sm text-blue-100">Portfolio operations · Issue patterns · Supplier performance</p>
                       </div>
                       <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-right backdrop-blur-sm">
                         <p className="text-[9px] font-bold uppercase tracking-widest text-blue-200">Report period</p>
@@ -511,6 +331,8 @@ export default function OperationsHubPage() {
                       <p className="mt-2 text-3xl font-black">{card.value}</p>
                     </div>)}
                   </section>
+
+                  <MaintenanceInsightsReport tickets={reportTickets} allTickets={tickets} startDate={reportStartDate} endDate={reportEndDate} />
 
                   <section className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
                     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

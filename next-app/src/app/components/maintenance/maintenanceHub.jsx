@@ -1,3 +1,6 @@
+import IssueCategoryEditor from './IssueCategoryEditor';
+import { issueCategorySource } from '@/utils/maintenanceInsights';
+import IssueWatch from './IssueWatch';
 import React, { useEffect, useState } from 'react';
 import { FaTools, FaPlus, FaCheckCircle, FaClock, FaPaperPlane, FaTrash } from 'react-icons/fa';
 import { db } from '@/app/Config/firebaseConfig';
@@ -5,7 +8,7 @@ import { auth } from '@/app/Config/firebaseConfig';
 import { addDoc, collection, onSnapshot, updateDoc, deleteDoc, doc, query, where, serverTimestamp, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
-export default function MaintenanceHub() {
+export default function MaintenanceHub({ onTicketsChange }) {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -52,13 +55,14 @@ export default function MaintenanceHub() {
     });
     loaded.sort((a, b) => String(b.createdDate || '').localeCompare(String(a.createdDate || '')));
     setTickets(loaded);
+    onTicketsChange?.(loaded);
     setLoading(false);
   }, (loadError) => {
     console.error('Failed to load maintenance tickets:', loadError);
     setError('Maintenance tickets could not be loaded. Please try again.');
     setLoading(false);
   });
-  }, [user, userRole]);
+  }, [user, userRole, onTicketsChange]);
 
   const [isCreating, setIsCreating] = useState(false);
   const [selectedTicketId, setSelectedTicketId] = useState(null);
@@ -278,6 +282,7 @@ export default function MaintenanceHub() {
 
   return (
     <div className="space-y-4">
+      <IssueWatch tickets={tickets} onSelectTicket={setSelectedTicketId} loading={loading} />
       
       {/* Pulse PA Proactive Bar */}
       <div className="bg-gradient-to-r from-blue-900 to-slate-900 text-white px-4 py-3 rounded-xl shadow-sm border border-blue-800 flex justify-between items-center gap-4">
@@ -428,6 +433,8 @@ export default function MaintenanceHub() {
                   )}
                 </div>
               </div>
+
+              <IssueCategoryEditor key={`${selectedTicket.id}-${issueCategorySource(selectedTicket)}-${JSON.stringify(selectedTicket.issueCategories)}-${selectedTicket.issueCategoriesConfirmed}`} ticket={selectedTicket} user={user} />
 
               {/* Inline Form to Add Suppliers & Trip Count Anytime */}
               {isAddingSupplierModal && (

@@ -75,12 +75,21 @@ service cloud.firestore {
         ]);
 
       allow update: if isFinance()
+        && resource.data.status == 'Pending'
         && request.resource.data.status == 'Done'
         && request.resource.data.processedByUid == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status', 'processedAt', 'processedByUid']);
 
-      allow delete: if false;
+      allow update: if (isFinance() || (isPqa() && resource.data.ownerUid == request.auth.uid))
+        && resource.data.status == 'Pending'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['invoiceNumber', 'ticketNumber', 'property', 'description', 'amount', 'billTo'])
+        && request.resource.data.amount is number
+        && request.resource.data.amount >= 0;
+
+      allow delete: if resource.data.status == 'Pending'
+        && (isFinance() || (isPqa() && resource.data.ownerUid == request.auth.uid));
     }
 
     // Keep the existing signed-in app access for every other collection.
