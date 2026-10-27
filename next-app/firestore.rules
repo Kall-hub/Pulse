@@ -84,7 +84,7 @@ service cloud.firestore {
       allow update: if (isFinance() || (isPqa() && resource.data.ownerUid == request.auth.uid))
         && resource.data.status == 'Pending'
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['invoiceNumber', 'ticketNumber', 'property', 'description', 'amount', 'billTo'])
+          .hasOnly(['invoiceNumber', 'ticketNumber', 'property', 'description', 'amount', 'billTo', 'entryDate'])
         && request.resource.data.amount is number
         && request.resource.data.amount >= 0;
 

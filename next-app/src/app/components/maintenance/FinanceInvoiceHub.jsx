@@ -18,11 +18,11 @@ import {
 import { auth, db } from '@/app/Config/firebaseConfig';
 import { BiPrinter, BiPencil, BiTrash } from 'react-icons/bi';
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const printable = (value) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const monthKeyFromDate = (value = '') => {
   const date = String(value ?? '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return '';
+  if (!/^\d{4}-\d{2}(?:-\d{2})?$/.test(date)) return '';
   return date.slice(0, 7);
 };
 const monthLabel = (value = '') => {
@@ -35,7 +35,7 @@ const monthLabel = (value = '') => {
 const money = (value) => {
   const amount = Number(value ?? 0);
   if (!Number.isFinite(amount)) return 'R0.00';
-  return `R${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `R${amount.toFixed(2)}`;
 };
 const monthWindowFor = (date = new Date()) => {
   const year = date.getFullYear();
@@ -58,6 +58,9 @@ export default function FinanceInvoiceHub() {
   const [entries, setEntries] = useState([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deletingEntry, setDeletingEntry] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(() => today().slice(0,7));
   const [savingEditId, setSavingEditId] = useState(null);
   const [startDate, setStartDate] = useState(() => monthWindowFor().startDate);
   const [endDate, setEndDate] = useState(() => monthWindowFor().endDate);
@@ -141,8 +144,8 @@ export default function FinanceInvoiceHub() {
   };
 
   const filteredEntries = useMemo(() => entries.filter(entry =>
-    (!startDate || entry.entryDate >= startDate) && (!endDate || entry.entryDate <= endDate)
-  ), [entries, startDate, endDate]);
+    (!selectedMonth || monthKeyFromDate(entry.entryDate) === selectedMonth) && (!startDate || entry.entryDate >= startDate) && (!endDate || entry.entryDate <= endDate)
+  ), [entries, selectedMonth, startDate, endDate]);
 
   const groupedEntries = useMemo(() => {
     const grouped = new Map();
@@ -156,10 +159,11 @@ export default function FinanceInvoiceHub() {
     return Array.from(grouped.values()).sort((a, b) => b.key.localeCompare(a.key));
   }, [filteredEntries]);
 
-  const canManageEntry = entry => isFinance || entry.ownerUid === user?.uid;
+  const canManageEntry = entry => !!user && !!entry && entry.status === 'Pending' && (isFinance || (isPqa && entry.ownerUid === user.uid));
 
   const resetToThisMonth = () => {
     const { startDate: monthStart, endDate: monthEnd } = monthWindowFor();
+    setSelectedMonth(today().slice(0,7));
     setStartDate(monthStart);
     setEndDate(monthEnd);
   };
@@ -207,6 +211,7 @@ export default function FinanceInvoiceHub() {
   };
 
   const startEdit = entry => {
+    if (!canManageEntry(entry)) return;
     setEditingId(entry.id);
     setEditForm({
       ticketNumber: entry.ticketNumber || '',
@@ -220,7 +225,7 @@ export default function FinanceInvoiceHub() {
   };
 
   const saveEdit = async entryId => {
-    if (!entryId) return;
+    if (!canManageEntry(entries.find(entry => entry.id === entryId))) { setError('Completed entries cannot be edited.'); return; }
 
     const amount = Number(editForm.amount);
     if (!Number.isFinite(amount) || amount < 0) {
@@ -253,9 +258,11 @@ export default function FinanceInvoiceHub() {
   };
 
   const handleDelete = async entry => {
-    if (!window.confirm(`Delete invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}?`)) return;
+    if (!canManageEntry(entries.find(item => item.id === entry.id))) { setError('Completed entries cannot be deleted.'); return; }
+    setDeleting(true);
     try {
       await deleteDoc(doc(db, 'financeEntries', entry.id));
+      setDeletingEntry(null);
       setError('');
     } catch (err) {
       console.error('Could not delete finance entry:', err);
@@ -297,7 +304,7 @@ export default function FinanceInvoiceHub() {
     }
 
     popup.document.write(`<!doctype html><html><head><title>Finance invoices</title><style>
-      body{font:14px Arial,sans-serif;padding:24px;color:#111}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:left}thead th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#475569}</style></head><body><h1>Finance invoices</h1><table><thead><tr><th>Entry date</th><th>Ticket</th><th>Invoice</th><th>Property</th><th>Description</th><th>Amount</th><th>Bill to</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></body></html>`);
+      body{font:14px Arial,sans-serif;padding:24px;color:#111}h1{font-size:22px}table{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:16px}th,td{padding:10px 8px;border:1px solid #bbb;text-align:left;vertical-align:top;overflow-wrap:anywhere;white-space:pre-wrap}thead th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#475569}</style></head><body><h1>Finance invoices</h1><table><thead><tr><th>Entry date</th><th>Ticket</th><th>Invoice</th><th>Property</th><th>Description</th><th>Amount</th><th>Bill to</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`);
     popup.document.close();
   };
 
@@ -305,6 +312,8 @@ export default function FinanceInvoiceHub() {
 
   return (
     <div className="space-y-6">
+      {deletingEntry && <div role="alertdialog" aria-modal="true" aria-labelledby="delete-invoice-title" className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"><div className="w-full max-w-sm space-y-4 rounded-2xl border border-white/20 bg-slate-900 p-6 text-white"><h3 id="delete-invoice-title" className="font-bold">Delete invoice entry?</h3><p className="text-sm text-slate-300">Delete {deletingEntry.invoiceNumber || deletingEntry.ticketNumber}? This cannot be undone.</p><div className="flex gap-3"><button type="button" disabled={deleting} onClick={() => setDeletingEntry(null)} className="rounded-lg bg-slate-700 px-4 py-2">Cancel</button><button type="button" disabled={deleting || !canManageEntry(entries.find(entry => entry.id === deletingEntry.id))} onClick={() => handleDelete(deletingEntry)} className="rounded-lg bg-rose-600 px-4 py-2 disabled:opacity-50">{deleting ? 'Deleting…' : 'Delete'}</button></div>{error && <p role="alert" className="text-sm text-rose-300">{error}</p>}</div></div>}
+      {error && !deletingEntry && <p role="alert" className="sticky top-4 z-10 rounded-xl bg-rose-950 p-4 text-sm text-rose-200">{error}</p>}
       {isPqa && (
         <form onSubmit={submit} className="rounded-3xl border border-white/5 bg-slate-800/40 p-6 space-y-4">
           <div>
@@ -317,7 +326,7 @@ export default function FinanceInvoiceHub() {
             <input className={inputClass} placeholder="Invoice number" required value={form.invoiceNumber} onChange={e => setForm({ ...form, invoiceNumber: e.target.value })} />
             <input className={inputClass} placeholder="Property" required value={form.property} onChange={e => setForm({ ...form, property: e.target.value })} />
             <input className={inputClass} placeholder="Amount (R)" type="number" min="0" step="0.01" required value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-            <input className={`${inputClass} md:col-span-2`} placeholder="Description" required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+            <textarea rows={3} className={`${inputClass} resize-y md:col-span-2`} placeholder="Description" required value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
             <input className={`${inputClass} md:col-span-2`} placeholder="Bill to" required value={form.billTo} onChange={e => setForm({ ...form, billTo: e.target.value })} />
           </div>
 
@@ -337,6 +346,7 @@ export default function FinanceInvoiceHub() {
           </div>
 
           <div className="flex flex-wrap items-end gap-2">
+            <label className="text-[10px] font-bold uppercase text-slate-400">Month<select className={inputClass} value={selectedMonth} onChange={event => setSelectedMonth(event.target.value)}><option value="">All months</option>{[...new Set([today().slice(0,7),selectedMonth,...entries.map(entry=>monthKeyFromDate(entry.entryDate))].filter(Boolean))].sort().reverse().map(month => <option key={month} value={month}>{monthLabel(month)}</option>)}</select></label>
             <button type="button" onClick={resetToThisMonth} className="rounded-xl border border-blue-400/50 bg-blue-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-blue-200">
               This month
             </button>
@@ -365,14 +375,14 @@ export default function FinanceInvoiceHub() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full table-fixed border-collapse text-left text-xs">
+              <table className="w-full min-w-[1200px] table-fixed border-collapse text-left text-xs [&_th]:border [&_th]:border-white/20 [&_td]:border [&_td]:border-white/20 [&_td]:[overflow-wrap:anywhere]">
                 <thead className="bg-slate-950/60 text-[10px] uppercase tracking-wider text-slate-400">
                   <tr>
                     <th className="p-3">Entry date</th>
                     <th className="p-3">Ticket</th>
                     <th className="p-3">Invoice</th>
                     <th className="p-3">Property</th>
-                    <th className="p-3">Description</th>
+                    <th className="w-64 p-3">Description</th>
                     <th className="p-3 text-right">Amount</th>
                     <th className="p-3">Bill to</th>
                     <th className="p-3">Status</th>
@@ -382,7 +392,7 @@ export default function FinanceInvoiceHub() {
 
                 <tbody className="divide-y divide-white/5 align-top">
                   {monthGroup.entries.map(entry => {
-                    const rowIsEditing = editingId === entry.id;
+                    const rowIsEditing = editingId === entry.id && canManageEntry(entry);
                     const canModify = canManageEntry(entry);
 
                     if (rowIsEditing) {
@@ -420,7 +430,7 @@ export default function FinanceInvoiceHub() {
                         <td className="whitespace-nowrap p-3 align-top font-mono text-blue-300">{entry.ticketNumber}</td>
                         <td className="whitespace-nowrap p-3 align-top font-mono text-violet-300">{entry.invoiceNumber || '—'}</td>
                         <td className="p-3 align-top">{entry.property}</td>
-                        <td className="max-w-[260px] break-words p-3 align-top">{entry.description}</td>
+                        <td className="whitespace-pre-wrap p-3 align-top">{entry.description}</td>
                         <td className="whitespace-nowrap p-3 align-top text-right font-semibold text-emerald-300">{money(entry.amount)}</td>
                         <td className="p-3 align-top">{entry.billTo}</td>
                         <td className="whitespace-nowrap p-3 align-top">
@@ -435,7 +445,7 @@ export default function FinanceInvoiceHub() {
                                 <button type="button" aria-label={`Edit invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => startEdit(entry)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-slate-950 transition hover:bg-amber-400">
                                   <BiPencil className="h-4 w-4" />
                                 </button>
-                                <button type="button" aria-label={`Delete invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => handleDelete(entry)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-600 text-white transition hover:bg-rose-500">
+                                <button type="button" aria-label={`Delete invoice ${entry.ticketNumber || entry.invoiceNumber || 'entry'}`} onClick={() => { setError(''); setDeletingEntry(entry); }} className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-600 text-white transition hover:bg-rose-500">
                                   <BiTrash className="h-4 w-4" />
                                 </button>
                               </>
