@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
-import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getDoc } from 'firebase/firestore';
 import { db, auth } from '../Config/firebaseConfig';
@@ -49,8 +49,7 @@ const formatPhoneForWhatsApp = (phone = '') => {
   let cleaned = String(phone || '').replace(/\D/g, '');
   if (!cleaned) return '';
   if (cleaned.startsWith('0')) {
-    cleaned = '27' + cleaned.substring(1);
-  } else if (!cleaned.startsWith('27')) {
+    cleaned = '27' + cleaned.substring(1);\n  } else if (!cleaned.startsWith('27')) {
     cleaned = '27' + cleaned;
   }
   return cleaned;
@@ -59,6 +58,17 @@ const formatPhoneForWhatsApp = (phone = '') => {
 const getClientBookingUrl = (bookingId) => {
   if (typeof window === 'undefined') return '';
   return `${window.location.origin}/viewing-response?id=${bookingId}`;
+};
+
+const buildWhatsAppStatusMessage = (viewing, statusType) => {
+  const url = `${window.location.origin}/viewing-response?id=${viewing.id}`;
+  if (statusType === 'slot-unavailable') {
+    return `Hi ${viewing.prospect}, this viewing slot is no longer available. Please choose another time here: ${url}`;
+  }
+  if (statusType === 'reschedule-approved') {
+    return `Hi ${viewing.prospect}, your reschedule request has been approved. Your new viewing is on ${viewing.date} at ${viewing.time}.`;
+  }
+  return `Hi ${viewing.prospect}! Your viewing for ${viewing.unit} is confirmed on ${viewing.date} at ${viewing.time}. Manage it here: ${url}`;
 };
 
 const ViewingsPage = () => {
@@ -95,35 +105,23 @@ const ViewingsPage = () => {
   }, []);
 
   useEffect(() => {
-    const fetchViewings = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, 'viewings'));
-        const data = querySnapshot.docs.map((docSnap) => {
-          const rawData = docSnap.data();
-          return {
-            id: docSnap.id,
-            ...rawData,
-            unit: normalizeUnitName(rawData.unit)
-          };
-        });
-        setViewings(data);
-      } catch (error) {
-        console.error('Error fetching viewings:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const unsub = onSnapshot(collection(db, 'viewings'), (snapshot) => {
+      const data = snapshot.docs.map((docSnap) => {
+        const rawData = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...rawData,
+          unit: normalizeUnitName(rawData.unit)
+        };
+      });
+      setViewings(data);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error listening to viewings:', error);
+      setLoading(false);
+    });
 
-    fetchViewings();
-
-    const handleResize = () => {
-      if (window.innerWidth < 768) setIsOpen(false);
-      else setIsOpen(true);
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => unsub();
   }, []);
 
   const stats = useMemo(() => {
@@ -152,10 +150,10 @@ const ViewingsPage = () => {
   const agentName = `${userData.firstName} ${userData.lastName}`.trim() || 'Agent';
   const [formData, setFormData] = useState({ prospect: '', phone: '', unit: '', date: '', time: '', agent: agentName });
 
-  const sendWhatsAppLink = (phone, prospect, unit, date, time, bookingId) => {
+  const sendWhatsAppLink = (phone, prospect, unit, date, time, bookingId, statusType = 'default') => {
     const formattedPhone = formatPhoneForWhatsApp(phone);
     const clientUrl = getClientBookingUrl(bookingId);
-    const message = `Hi ${prospect}! 👋\n\nYour viewing for *${unit}* has been confirmed on *${date}* at *${time}*.\n\nTo manage your appointment, tap here:\n${clientUrl}\n\nYou can reschedule or cancel if needed.\n\nWe will review any reschedule request before confirming a new slot.`;
+    const message = buildWhatsAppStatusMessage({ id: bookingId, prospect, unit, date, time }, statusType) + `\n\nManage here: ${clientUrl}`;
     const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
   };
@@ -179,7 +177,7 @@ const ViewingsPage = () => {
     try {
       const docRef = await addDoc(collection(db, 'viewings'), newBooking);
       setViewings((prev) => [{ id: docRef.id, ...newBooking }, ...prev]);
-      sendWhatsAppLink(formData.phone, formData.prospect, canonicalUnit, formData.date, formData.time, docRef.id);
+      sendWhatsAppLink(formData.phone, formData.prospect, canonicalUnit, formData.date, formData.time, docRef.id, 'default');
       setIsBookModalOpen(false);
       setFormData({ prospect: '', phone: '', unit: '', date: '', time: '', agent: agentName });
     } catch (error) {
@@ -206,14 +204,6 @@ const ViewingsPage = () => {
         cancelledBy: 'agent',
         adminNote: nextCount >= 3 ? 'High cancellation count flagged as not serious.' : 'Appointment cancelled by admin.'
       });
-
-      setViewings((prev) => prev.map((v) => v.id === id ? {
-        ...v,
-        status: 'Agent Cancelled',
-        cancelledCount: nextCount,
-        seriousnessFlag: nextCount >= 3 ? 'Not Serious' : '',
-        cancelledBy: 'agent'
-      } : v));
     } catch (error) {
       console.error('Error cancelling:', error);
     }
@@ -234,7 +224,6 @@ const ViewingsPage = () => {
         adminNote: `Outcome logged: ${outcome}. ${note}`
       });
 
-      setViewings((prev) => prev.map((v) => v.id === activeViewingId ? { ...v, status: 'Completed', outcome, note } : v));
       setIsOutcomeModalOpen(false);
       setActiveViewingId(null);
     } catch (error) {
@@ -244,7 +233,7 @@ const ViewingsPage = () => {
 
   const resendLink = (viewing) => {
     const normalizedUnit = normalizeUnitName(viewing.unit);
-    sendWhatsAppLink(viewing.phone, viewing.prospect, normalizedUnit, viewing.date, viewing.time, viewing.id);
+    sendWhatsAppLink(viewing.phone, viewing.prospect, normalizedUnit, viewing.date, viewing.time, viewing.id, 'default');
 
     const btn = document.getElementById(`resend-${viewing.phone}`);
     if (btn) {
@@ -263,8 +252,6 @@ const ViewingsPage = () => {
         whatsappStatus: 'no-whatsapp',
         status: 'No WhatsApp'
       });
-
-      setViewings((prev) => prev.map((v) => v.id === id ? { ...v, whatsappStatus: 'no-whatsapp', status: 'No WhatsApp' } : v));
     } catch (error) {
       console.error('Error updating WhatsApp status:', error);
     }
@@ -281,14 +268,15 @@ const ViewingsPage = () => {
         rescheduleRequest: null
       });
 
-      setViewings((prev) => prev.map((v) => v.id === viewing.id ? {
-        ...v,
-        status: 'Confirmed',
-        date: viewing.rescheduleRequest?.date || v.date,
-        time: viewing.rescheduleRequest?.time || v.time,
-        adminNote: 'Reschedule approved. Client was moved to the new slot.',
-        rescheduleRequest: null
-      } : v));
+      sendWhatsAppLink(
+        viewing.phone,
+        viewing.prospect,
+        normalizeUnitName(viewing.unit),
+        viewing.rescheduleRequest?.date || viewing.date,
+        viewing.rescheduleRequest?.time || viewing.time,
+        viewing.id,
+        'reschedule-approved'
+      );
     } catch (error) {
       console.error('Error approving reschedule:', error);
     }
@@ -304,13 +292,15 @@ const ViewingsPage = () => {
         note: 'Slot unavailable. Please choose another time.'
       });
 
-      setViewings((prev) => prev.map((v) => v.id === viewing.id ? {
-        ...v,
-        status: 'Slot Unavailable',
-        adminNote: `Requested slot ${viewing.rescheduleRequest?.date || viewing.date} at ${viewing.rescheduleRequest?.time || viewing.time} was unavailable. Client should choose another time.`,
-        rescheduleRequest: null,
-        note: 'Slot unavailable. Please choose another time.'
-      } : v));
+      sendWhatsAppLink(
+        viewing.phone,
+        viewing.prospect,
+        normalizeUnitName(viewing.unit),
+        viewing.date,
+        viewing.time,
+        viewing.id,
+        'slot-unavailable'
+      );
     } catch (error) {
       console.error('Error rejecting reschedule:', error);
     }
