@@ -8,6 +8,7 @@ const formatDate = (value) => {
   if (!value) return '';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
+
   return new Intl.DateTimeFormat('en-ZA', {
     year: 'numeric',
     month: 'short',
@@ -22,13 +23,16 @@ export default function ViewingResponsePage() {
   const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
   const [formData, setFormData] = useState({ date: '', time: '' });
   const [status, setStatus] = useState('idle');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
+    const id = params.get('id')?.trim();
+
     setBookingId(id || '');
 
     if (!id) {
+      setViewing(null);
       setLoading(false);
       return;
     }
@@ -39,10 +43,14 @@ export default function ViewingResponsePage() {
         const viewingDoc = await getDoc(viewingRef);
 
         if (viewingDoc.exists()) {
-          setViewing(viewingDoc.data());
+          setViewing({ id: viewingDoc.id, ...viewingDoc.data() });
+        } else {
+          setViewing(null);
         }
-      } catch (error) {
-        console.error('Error fetching viewing:', error);
+      } catch (err) {
+        console.error('Error fetching viewing:', err);
+        setViewing(null);
+        setError('This viewing link is invalid or no longer available.');
       } finally {
         setLoading(false);
       }
@@ -65,24 +73,31 @@ export default function ViewingResponsePage() {
         cancelledCount: nextCount,
         cancelledAt: new Date().toISOString(),
         seriousnessFlag: nextCount >= 3 ? 'Not Serious' : '',
-        adminNote: nextCount >= 3
-          ? 'Client has cancelled multiple times and was flagged as not serious.'
-          : 'Client cancelled the viewing.'
+        adminNote:
+          nextCount >= 3
+            ? 'Client has cancelled multiple times and was flagged as not serious.'
+            : 'Client cancelled the viewing.'
       });
 
       setStatus('cancelled');
-    } catch (error) {
-      console.error('Error cancelling viewing:', error);
-      setStatus('error');
+      setError('');
+    } catch (err) {
+      console.error('Error cancelling viewing:', err);
+      setError('Could not cancel this viewing. Please try again.');
     }
   };
 
   const handleRescheduleSubmit = async (e) => {
     e.preventDefault();
-    if (!bookingId || !formData.date || !formData.time) return;
+
+    if (!bookingId || !formData.date || !formData.time) {
+      setError('Please choose a preferred date and time.');
+      return;
+    }
 
     try {
       const viewingRef = doc(db, 'viewings', bookingId);
+
       await updateDoc(viewingRef, {
         status: 'Reschedule Requested',
         rescheduleRequest: {
@@ -91,16 +106,23 @@ export default function ViewingResponsePage() {
         },
         adminNote: 'Client requested a new viewing slot and is awaiting approval.'
       });
+
       setStatus('reschedule-requested');
       setIsRescheduleOpen(false);
+      setFormData({ date: '', time: '' });
+      setError('');
+
       setViewing((prev) => ({
         ...prev,
         status: 'Reschedule Requested',
-        rescheduleRequest: { date: formData.date, time: formData.time }
+        rescheduleRequest: {
+          date: formData.date,
+          time: formData.time
+        }
       }));
-    } catch (error) {
-      console.error('Error requesting reschedule:', error);
-      setStatus('error');
+    } catch (err) {
+      console.error('Error requesting reschedule:', err);
+      setError('Could not send the reschedule request.');
     }
   };
 
@@ -126,7 +148,9 @@ export default function ViewingResponsePage() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="bg-white rounded-[2rem] p-8 max-w-md w-full text-center shadow-2xl">
           <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Not Found</h1>
-          <p className="mt-3 text-slate-600">This viewing link is invalid or no longer available.</p>
+          <p className="mt-3 text-slate-600">
+            {error || 'This viewing link is invalid or no longer available.'}
+          </p>
         </div>
       </div>
     );
@@ -136,18 +160,42 @@ export default function ViewingResponsePage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-violet-950 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden">
         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-8 py-8 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/20 text-2xl mb-4">🏠</div>
-          <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white">Viewing</h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-purple-100 mt-2">Manage your appointment</p>
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-white/20 text-2xl mb-4">
+            🏠
+          </div>
+          <h1 className="text-3xl font-black uppercase italic tracking-tighter text-white">
+            Viewing
+          </h1>
+          <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-purple-100 mt-2">
+            Manage your appointment
+          </p>
         </div>
 
         <div className="p-7">
+          {error && (
+            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
           <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 mb-6">
-            <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">Viewing Details</div>
+            <div className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">
+              Viewing Details
+            </div>
+
             <div className="space-y-2 text-sm font-semibold text-slate-700">
-              <div className="flex justify-between gap-4"><span>Unit</span><span className="font-black uppercase text-slate-900">{viewing.unit}</span></div>
-              <div className="flex justify-between gap-4"><span>Date</span><span className="font-black">{formatDate(viewing.date)}</span></div>
-              <div className="flex justify-between gap-4"><span>Time</span><span className="font-black">{viewing.time}</span></div>
+              <div className="flex justify-between gap-4">
+                <span>Unit</span>
+                <span className="font-black uppercase text-slate-900">{viewing.unit}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span>Date</span>
+                <span className="font-black">{formatDate(viewing.date)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span>Time</span>
+                <span className="font-black">{viewing.time}</span>
+              </div>
             </div>
           </div>
 
@@ -156,6 +204,7 @@ export default function ViewingResponsePage() {
           {status !== 'cancelled' && status !== 'reschedule-requested' && (
             <div className="space-y-3">
               <button
+                type="button"
                 onClick={() => setIsRescheduleOpen(true)}
                 className="w-full rounded-2xl bg-purple-600 text-white py-4 font-black uppercase text-[11px] tracking-[0.2em] hover:bg-purple-700 transition-all"
               >
@@ -163,6 +212,7 @@ export default function ViewingResponsePage() {
               </button>
 
               <button
+                type="button"
                 onClick={handleCancel}
                 className="w-full rounded-2xl border border-red-200 bg-red-50 text-red-600 py-4 font-black uppercase text-[11px] tracking-[0.2em] hover:bg-red-100 transition-all"
               >
@@ -186,7 +236,9 @@ export default function ViewingResponsePage() {
           {isRescheduleOpen && (
             <form onSubmit={handleRescheduleSubmit} className="mt-6 space-y-4 border-t border-slate-200 pt-6">
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">Preferred Date</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">
+                  Preferred Date
+                </label>
                 <input
                   type="date"
                   required
@@ -197,7 +249,9 @@ export default function ViewingResponsePage() {
               </div>
 
               <div>
-                <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">Preferred Time</label>
+                <label className="block text-[10px] font-black uppercase tracking-[0.25em] text-slate-400 mb-2">
+                  Preferred Time
+                </label>
                 <input
                   type="time"
                   required
@@ -215,6 +269,7 @@ export default function ViewingResponsePage() {
                 >
                   Close
                 </button>
+
                 <button
                   type="submit"
                   className="flex-1 rounded-2xl bg-purple-600 text-white py-3 font-black uppercase text-[10px] tracking-[0.2em] hover:bg-purple-700"
