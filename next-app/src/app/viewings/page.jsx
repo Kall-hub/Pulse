@@ -48,17 +48,19 @@ const normalizeUnitName = (rawUnit = '') => {
 const formatPhoneForWhatsApp = (phone = '') => {
   let cleaned = String(phone || '').replace(/\D/g, '');
   if (!cleaned) return '';
+
   if (cleaned.startsWith('0')) {
     cleaned = '27' + cleaned.substring(1);
   } else if (!cleaned.startsWith('27')) {
     cleaned = '27' + cleaned;
   }
+
   return cleaned;
 };
 
 const getClientBookingUrl = (bookingId) => {
-  if (typeof window === 'undefined') return '';
-  return `${window.location.origin}/viewing-response?id=${bookingId}`;
+  if (typeof window === 'undefined' || !bookingId) return '';
+  return `${window.location.origin}/viewing-response?id=${encodeURIComponent(bookingId)}`;
 };
 
 const buildWhatsAppStatusMessage = (viewing, statusType) => {
@@ -334,7 +336,7 @@ const ViewingsPage = () => {
             <div className="w-full overflow-x-auto pb-1">
               <div className="flex bg-slate-200 p-1 rounded-xl w-fit shadow-inner scale-95 origin-left whitespace-nowrap">
                 {['upcoming', 'cancelled', 'history', 'analytics'].map((f) => (
-                  <button key={f} onClick={() => setFilter(f)} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${filter === f ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:bg-slate-100'}`}>
+                  <button key={f} onClick={() => setFilter(f)} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${filter === f ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                     {f.toUpperCase()}
                   </button>
                 ))}
@@ -343,7 +345,7 @@ const ViewingsPage = () => {
           </div>
 
           {filter !== 'analytics' && userRole !== 'PQA' && userRole !== 'Maintenance Admin' && (
-            <button onClick={() => setIsBookModalOpen(true)} className="w-full md:w-auto bg-purple-600 text-white py-4 px-8 rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-purple-700 transition-all active:scale-95">
+            <button onClick={() => setIsBookModalOpen(true)} className="w-full md:w-auto bg-purple-600 text-white py-4 px-8 rounded-2xl shadow-xl font-black text-[10px] uppercase tracking-widest hover:bg-purple-700 transition-all active:scale-[0.99] flex items-center justify-center gap-2">
               <FaPlus size={12} /> <span>New Booking</span>
             </button>
           )}
@@ -452,7 +454,7 @@ const ViewingsPage = () => {
                   <input required type="time" className="w-full bg-slate-100 p-4 rounded-2xl font-black text-xs outline-none" value={formData.time} onChange={(e) => setFormData({ ...formData, time: e.target.value })} />
                 </div>
               </div>
-              <button type="submit" className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-purple-700 transition-all active:scale-95 flex items-center justify-center gap-3">
+              <button type="submit" className="w-full py-5 bg-purple-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-purple-700 transition-all active:scale-[0.99] flex items-center justify-center gap-2">
                 <FaPaperPlane /> <span>Send Booking Link</span>
               </button>
             </form>
@@ -468,15 +470,15 @@ const ViewingsPage = () => {
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Log the client's reaction</p>
             </div>
             <div className="p-8 grid grid-cols-1 gap-3">
-              <button onClick={() => saveOutcome('Accepted', 'Application Started')} className="p-4 rounded-2xl bg-green-50 border border-green-100 hover:border-green-300 hover:bg-green-100 transition-all flex items-center gap-3 justify-center">
+              <button onClick={() => saveOutcome('Accepted', 'Application Started')} className="p-4 rounded-2xl bg-green-50 border border-green-100 hover:border-green-300 hover:bg-green-100 transition-all flex items-center gap-3">
                 <div className="bg-green-500 text-white p-2 rounded-full"><FaHandshake /></div>
                 <span className="text-sm font-black uppercase text-green-800">Accepted</span>
               </button>
-              <button onClick={() => saveOutcome('Thinking', 'Client needs time')} className="p-4 rounded-2xl bg-orange-50 border border-orange-100 hover:border-orange-300 hover:bg-orange-100 transition-all flex items-center gap-3 justify-center">
+              <button onClick={() => saveOutcome('Thinking', 'Client needs time')} className="p-4 rounded-2xl bg-orange-50 border border-orange-100 hover:border-orange-300 hover:bg-orange-100 transition-all flex items-center gap-3">
                 <div className="bg-orange-400 text-white p-2 rounded-full"><FaBrain /></div>
                 <span className="text-sm font-black uppercase text-orange-800">Thinking</span>
               </button>
-              <button onClick={() => saveOutcome('Rejected', 'Not interested')} className="p-4 rounded-2xl bg-red-50 border border-red-100 hover:border-red-300 hover:bg-red-100 transition-all flex items-center gap-3 justify-center">
+              <button onClick={() => saveOutcome('Rejected', 'Not interested')} className="p-4 rounded-2xl bg-red-50 border border-red-100 hover:border-red-300 hover:bg-red-100 transition-all flex items-center gap-3">
                 <div className="bg-red-500 text-white p-2 rounded-full"><FaBan /></div>
                 <span className="text-sm font-black uppercase text-red-800">Rejected</span>
               </button>
@@ -505,7 +507,7 @@ const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp, o
   };
 
   return (
-    <div className={`bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden h-auto hover:shadow-md transition-all animate-in fade-in slide-in-from-bottom-4 ${isCancelled ? 'opacity-80' : ''}`}>
+    <div className={`bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden h-auto hover:shadow-md transition-all animate-in fade-in slide-in-from-bottom-4 ${isCancelled ? 'opacity-95' : ''}`}>
       <div className="px-6 py-6 md:px-8 flex flex-col md:flex-row justify-between items-start gap-6">
         <div className="flex items-start space-x-5 w-full">
           <div className={`p-4 rounded-2xl shadow-lg text-white shrink-0 ${isCancelled ? 'bg-red-500' : isCompleted ? 'bg-green-500' : isReschedulePending ? 'bg-amber-500' : 'bg-purple-600'}`}>
@@ -602,10 +604,10 @@ const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp, o
             )}
           </div>
           <div className="flex space-x-3 w-full md:w-auto">
-            <button onClick={onCancel} className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-slate-700 transition-colors">
+            <button onClick={onCancel} className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-red-500">
               Cancel
             </button>
-            <button onClick={onComplete} className="flex-1 md:flex-none bg-slate-900 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-700 transition-colors">
+            <button onClick={onComplete} className="flex-1 md:flex-none bg-slate-900 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
               <FaCheck className="text-green-400" /> <span>Result</span>
             </button>
           </div>
