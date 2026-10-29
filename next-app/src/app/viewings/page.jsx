@@ -13,6 +13,38 @@ import {
 
 const TRAFFIC_THRESHOLD = 5;
 
+const normalizeUnitName = (rawUnit = '') => {
+  const value = String(rawUnit || '').trim();
+  if (!value) return '';
+
+  const cleaned = value.replace(/\s+/g, ' ').replace(/[^a-zA-Z0-9 ]/g, '').trim();
+  const upper = cleaned.toUpperCase();
+
+  const aliases = {
+    'LC': 'LUNNON CREST',
+    'LUNNON CREST': 'LUNNON CREST',
+    'LUNNONCREST': 'LUNNON CREST',
+    'BLVD': 'HILLCREST BOULEVARD',
+    'BOULEVARD': 'HILLCREST BOULEVARD',
+    'HILLCREST BOULEVARD': 'HILLCREST BOULEVARD',
+    'HILLCRESTBOULEVARD': 'HILLCREST BOULEVARD',
+    'VIEW': 'HILLCREST VIEW',
+    'HILLCREST VIEW': 'HILLCREST VIEW',
+    'HILLCRESTVIEW': 'HILLCREST VIEW',
+    'VILLA MAG': 'VILLA MAGNOLIA',
+    'VILLA MAGNOLIA': 'VILLA MAGNOLIA',
+    'VILLAMAG': 'VILLA MAGNOLIA',
+    'VILLAMAGNOLIA': 'VILLA MAGNOLIA',
+    'JAK': 'JAKARANDA',
+    'JAKARANDA': 'JAKARANDA',
+    'JAKRANDA': 'JAKARANDA',
+    'RUM': 'RUMOURS',
+    'RUMOURS': 'RUMOURS'
+  };
+
+  return aliases[upper] || upper;
+};
+
 const formatPhoneForWhatsApp = (phone = '') => {
   let cleaned = String(phone || '').replace(/\D/g, '');
   if (!cleaned) return '';
@@ -66,10 +98,14 @@ const ViewingsPage = () => {
     const fetchViewings = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, 'viewings'));
-        const data = querySnapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data()
-        }));
+        const data = querySnapshot.docs.map((docSnap) => {
+          const rawData = docSnap.data();
+          return {
+            id: docSnap.id,
+            ...rawData,
+            unit: normalizeUnitName(rawData.unit)
+          };
+        });
         setViewings(data);
       } catch (error) {
         console.error('Error fetching viewings:', error);
@@ -93,7 +129,8 @@ const ViewingsPage = () => {
   const stats = useMemo(() => {
     const counts = {};
     viewings.forEach((v) => {
-      counts[v.unit] = (counts[v.unit] || 0) + 1;
+      const unit = normalizeUnitName(v.unit);
+      counts[unit] = (counts[unit] || 0) + 1;
     });
 
     const sortedUnits = Object.entries(counts)
@@ -126,9 +163,10 @@ const ViewingsPage = () => {
   const handleBook = async (e) => {
     e.preventDefault();
 
+    const canonicalUnit = normalizeUnitName(formData.unit);
     const newBooking = {
       ...formData,
-      unit: formData.unit.toUpperCase(),
+      unit: canonicalUnit,
       status: 'Confirmed',
       linkSent: true,
       whatsappStatus: 'sent',
@@ -141,7 +179,7 @@ const ViewingsPage = () => {
     try {
       const docRef = await addDoc(collection(db, 'viewings'), newBooking);
       setViewings((prev) => [{ id: docRef.id, ...newBooking }, ...prev]);
-      sendWhatsAppLink(formData.phone, formData.prospect, formData.unit.toUpperCase(), formData.date, formData.time, docRef.id);
+      sendWhatsAppLink(formData.phone, formData.prospect, canonicalUnit, formData.date, formData.time, docRef.id);
       setIsBookModalOpen(false);
       setFormData({ prospect: '', phone: '', unit: '', date: '', time: '', agent: agentName });
     } catch (error) {
@@ -205,7 +243,8 @@ const ViewingsPage = () => {
   };
 
   const resendLink = (viewing) => {
-    sendWhatsAppLink(viewing.phone, viewing.prospect, viewing.unit, viewing.date, viewing.time, viewing.id);
+    const normalizedUnit = normalizeUnitName(viewing.unit);
+    sendWhatsAppLink(viewing.phone, viewing.prospect, normalizedUnit, viewing.date, viewing.time, viewing.id);
 
     const btn = document.getElementById(`resend-${viewing.phone}`);
     if (btn) {
@@ -463,6 +502,7 @@ const ViewingsPage = () => {
 
 const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp, onApproveReschedule, onRejectReschedule }) => {
   const { unit, prospect, phone, agent, date, time, status, outcome, note, whatsappStatus, rescheduleRequest, seriousnessFlag } = data;
+  const normalizedUnit = normalizeUnitName(unit);
   const isCancelled = status.includes('Cancelled') || status === 'Slot Unavailable';
   const isCompleted = status === 'Completed';
   const isReschedulePending = status === 'Reschedule Requested';
@@ -481,7 +521,7 @@ const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp, o
             {isCancelled ? <FaTimes size={20} /> : isCompleted ? <FaCheck size={20} /> : isReschedulePending ? <FaCalendarAlt size={20} /> : <FaUserFriends size={20} />}
           </div>
           <div className="w-full">
-            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic leading-none mb-2 break-words">{unit}</h2>
+            <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic leading-none mb-2 break-words">{normalizedUnit}</h2>
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2 text-[11px] font-black text-slate-800 uppercase tracking-tight">
                 <span>{prospect}</span>
