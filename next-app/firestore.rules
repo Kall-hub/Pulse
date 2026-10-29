@@ -19,6 +19,13 @@ service cloud.firestore {
       return hasRole('Finance');
     }
 
+    match /viewings/{viewingId} {
+      allow read: if true;
+      allow create: if signedIn();
+      allow update: if true;
+      allow delete: if signedIn();
+    }
+
     match /tickets/{ticketId} {
       // PQA can read unowned legacy tickets to restore them to the PQA account.
       allow read: if signedIn()
@@ -98,7 +105,8 @@ service cloud.firestore {
       allow read, write: if signedIn()
         && collection != 'tickets'
         && collection != 'emailLogs'
-        && collection != 'financeEntries';
+        && collection != 'financeEntries'
+        && collection != 'viewings';
     }
   }
 }
