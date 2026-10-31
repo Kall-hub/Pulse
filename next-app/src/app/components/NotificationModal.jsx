@@ -1,4 +1,4 @@
-import { FaClock, FaFingerprint, FaTrash } from "react-icons/fa";
+import { FaClock, FaTrash } from "react-icons/fa";
 import { BiBell, BiX } from "react-icons/bi";
 
 const NotificationModal = ({ data, onClose, onDelete, onAcknowledge }) => {
@@ -56,17 +56,7 @@ const NotificationModal = ({ data, onClose, onDelete, onAcknowledge }) => {
             {data.message}
           </p>
 
-          {/* Developer Note / LMS Cover Story */}
-          <div className="mt-10 p-6 bg-[#F8FAFC] border border-slate-200 rounded-3xl">
-            <div className="flex items-center gap-2 mb-3">
-              <FaFingerprint className="text-slate-300" />
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Audit Trail</p>
-            </div>
-            <p className="text-xs font-semibold text-slate-500">
-              This log has been synchronized with the main database. 
-              <span className="text-blue-600"> LMS Ticket ID: #88392-X</span> (Pending Rasta's signature).
-            </p>
-          </div>
+
         </div>
 
         {/* Footer Actions */}

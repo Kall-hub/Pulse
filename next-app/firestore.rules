@@ -92,13 +92,17 @@ service cloud.firestore {
         && (isFinance() || (isPqa() && resource.data.ownerUid == request.auth.uid));
     }
 
+    // Viewing data is served through authenticated Netlify Functions.
+    match /viewings/{viewingPath=**} { allow read, write: if false; }
+
     // Keep the existing signed-in app access for every other collection.
     // Sensitive collections above have their own account and role checks.
     match /{collection}/{allDocuments=**} {
       allow read, write: if signedIn()
         && collection != 'tickets'
         && collection != 'emailLogs'
-        && collection != 'financeEntries';
+        && collection != 'financeEntries'
+        && collection != 'viewings';
     }
   }
 }

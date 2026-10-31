@@ -1,0 +1,91 @@
+
+.portal { max-width:1050px; margin:0 auto; padding:30px 20px 65px; color:#22384a; font-family:Arial,Helvetica,sans-serif; }
+.hero { margin:5px 0 25px; }
+.hero h1,.detailHeader h1 { font-size:clamp(28px,5vw,40px); font-weight:800; letter-spacing:-1.2px; line-height:1.15; margin:8px 0 12px; }
+.hero>p:last-child { font-size:14px; color:#75838e; max-width:650px; line-height:1.7; }
+.heroTop,.sectionHeading,.workloadName,.jobCardTop,.jobCardBottom,.repairHeading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.heroTop .textButton { font-size:11px; }
+.eyebrow { font-size:10px; letter-spacing:1.5px; font-weight:750; color:#7b8b97; margin:0 0 6px; }
+.primaryButton,.cameraButton { display:flex; align-items:center; justify-content:center; gap:10px; background:#225d87; color:white; border:0; border-radius:12px; padding:14px 18px; font-size:13px; font-weight:700; cursor:pointer; min-height:47px; }
+.primaryButton:hover { background:#17486c; }
+.primaryButton:disabled,.cameraButton[aria-disabled=true],.photoDialog button:disabled { opacity:.45; cursor:not-allowed; }
+.textButton { display:inline-flex; align-items:center; justify-content:center; gap:9px; background:transparent; color:#376484; font-size:12px; font-weight:700; cursor:pointer; border:0; padding:8px 0; }
+.portal button:focus-visible,.workloadBoard button:focus-visible,.photoDialog button:focus-visible,.cameraButton:focus-within { outline:3px solid #d59b49; outline-offset:3px; }
+.workloadBoard { background:white; border:1px solid #dfe6eb; border-radius:18px; padding:22px; margin:0 0 24px; color:#22384a; }
+.sectionHeading { margin:22px 0 16px; flex-wrap:wrap; }
+.sectionHeading h2 { font-size:20px; font-weight:750; letter-spacing:-.5px; margin:0; }
+.workloadBoard>.sectionHeading { margin-top:0; }
+.datePill { color:#647c8d; background:#eff4f7; border-radius:8px; padding:7px 10px; font-size:11px; }
+.workloadGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.workloadCard { text-align:left; padding:17px; border:1px solid #dce6ed; border-radius:13px; background:#f8fafb; min-width:0; }
+button.workloadCard { cursor:pointer; transition:transform .15s; }
+button.workloadCard:hover { transform:translateY(-2px); }
+.workloadCard[data-warning=true] { background:#fffbf0; border-color:#eed6a6; }
+.workloadName { flex-wrap:wrap; gap:8px; }
+.workloadName strong { font-size:15px; }
+.badge { background:#eaf0f5; color:#5c778c; padding:5px 7px; font-size:9px; font-weight:700; border-radius:6px; white-space:nowrap; }
+.badge[data-warning=true] { background:#f9e8bd; color:#936a22; }
+.workloadNumbers { display:flex; justify-content:space-between; gap:10px; margin-top:20px; }
+.workloadNumbers b { display:block; font-size:24px; }
+.workloadNumbers span { display:block; color:#7c8993; font-size:9px; margin-top:4px; }
+.workloadCard>p { font-size:10px; line-height:1.65; color:#7a8791; margin-top:15px; }
+.openLink { display:block; color:#2f6084; font-size:11px; font-weight:750; margin-top:14px; }
+.help { font-size:11px; color:#7c8c98; line-height:1.7; margin:10px 0; }
+.personalStats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:22px 0; }
+.personalStats>div { padding:20px; border:1px solid #dfe7ec; background:white; border-radius:13px; }
+.personalStats strong { font-size:32px; font-weight:800; display:block; }
+.personalStats span { display:block; font-size:11px; color:#768b99; margin-top:6px; }
+.personalStats>div[data-warning=true] { background:#fff8e9; border-color:#efd4a3; }
+.ageNotice { padding:18px 20px; border:1px solid #efd29d; border-left:4px solid #d29b42; background:#fff9ec; border-radius:12px; margin-bottom:20px; color:#846229; }
+.ageNotice strong { font-size:14px; }
+.ageNotice p { font-size:12px; line-height:1.8; margin-top:7px; }
+.ageNotice .textButton { color:#8c692d; margin-top:6px; }
+.jobTabs { display:flex; gap:7px; overflow:auto; padding:3px 2px 12px; }
+.jobTabs button { white-space:nowrap; border:1px solid #dee7ed; background:white; color:#6a7d8a; padding:11px 13px; border-radius:11px; font-size:11px; font-weight:700; cursor:pointer; }
+.jobTabs button[aria-pressed=true] { background:#203e55; color:white; border-color:#203e55; }
+.jobTabs button span { font-size:10px; margin-left:7px; opacity:.8; }
+.search { display:flex; align-items:center; gap:12px; border:1px solid #dae5ec; background:white; border-radius:12px; padding:14px 16px; color:#8497a4; margin-top:7px; }
+.search input { background:transparent; border:0; outline:0; width:100%; min-width:0; font-size:13px; color:#294255; }
+.jobGrid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.jobCard { display:block; text-align:left; background:white; border:1px solid #dce6ed; border-radius:15px; padding:21px; cursor:pointer; box-shadow:0 2px 7px #25475d06; }
+.jobCard:hover { border-color:#6e9dbf; }
+.jobCardTop>span:first-child { font-size:11px; font-weight:750; color:#768995; }
+.jobCard h3 { font-size:23px; font-weight:800; letter-spacing:-.7px; margin:14px 0 6px; }
+.jobDate { font-size:12px; color:#81909b; }
+.jobProgress { height:6px; background:#edf2f5; margin:20px 0 12px; border-radius:4px; overflow:hidden; }
+.jobProgress span { display:block; height:100%; background:#6b9e8a; }
+.jobCardBottom { font-size:10px; color:#7e8f9a; }
+.jobCardBottom strong { color:#2e6288; font-size:12px; white-space:nowrap; }
+.ageFlag { font-size:10px; color:#a27b38; background:#fff6e2; border-radius:6px; padding:8px; margin-top:14px; }
+.detailHeader { padding:24px; margin:12px 0 20px; background:white; border:1px solid #dfe7ed; border-radius:16px; }
+.detailMeta { display:flex; flex-wrap:wrap; gap:8px; font-size:11px; color:#79909e; }
+.detailMeta span { border:1px solid #e4ebef; padding:7px 10px; border-radius:7px; }
+.repairList { display:grid; gap:14px; }
+.repairItem { padding:22px; background:white; border:1px solid #dce5ed; border-radius:14px; }
+.repairItem[data-done=true] { background:#f7fcf9; border-color:#d4e7db; }
+.repairItem h3 { font-size:17px; font-weight:750; line-height:1.5; margin:0; }
+.repairItem>.primaryButton { margin-top:18px; }
+.doneIcon { color:#5b9779; font-size:24px; flex-shrink:0; }
+.savedPhotos { display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; }
+.savedPhotos img { width:74px; height:74px; object-fit:cover; border-radius:9px; border:2px solid #c6dfd1; }
+.empty { border:1px dashed #cbdbe6; border-radius:14px; background:white; padding:35px 20px; text-align:center; }
+.empty h3 { font-size:19px; font-weight:750; }
+.empty p { color:#7b8d9a; font-size:12px; line-height:1.8; margin-top:12px; }
+.error,.success { padding:15px; border:1px solid #efc8be; border-radius:10px; background:#fff2ef; color:#a14f3b; font-size:12px; line-height:1.7; margin-bottom:20px; }
+.error button { display:block; border:0; text-decoration:underline; background:transparent; color:inherit; font-weight:700; margin-top:7px; cursor:pointer; }
+.success { border-color:#c6dfcf; background:#edf8f1; color:#4b7c5f; }
+.backdrop { position:fixed; inset:0; background:#172b3dbd; z-index:200; display:flex; align-items:center; justify-content:center; padding:18px; }
+.photoDialog { border-radius:18px; padding:25px; max-width:480px; width:100%; max-height:92vh; overflow:auto; background:white; box-shadow:0 20px 60px #142a3d4d; outline:0; }
+.photoDialog h2 { font-size:24px; font-weight:800; letter-spacing:-.5px; margin:8px 0 12px; }
+.photoDialog>p { font-size:13px; line-height:1.8; }
+.photoRule { background:#edf4fa; color:#4c7390; font-size:12px; line-height:1.7; padding:12px; margin:15px 0; border-radius:9px; }
+.photoGrid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:18px 0; }
+.photoGrid img { width:100%; height:140px; object-fit:cover; border-radius:9px; }
+.photoGrid button { background:#f5f7f9; border:1px solid #e2e7ec; padding:8px; width:100%; border-radius:7px; color:#768794; font-size:10px; margin-top:7px; cursor:pointer; }
+.cameraButton { position:relative; background:#e9f1f8; color:#345f7e; margin:15px 0; }
+.cameraButton input { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+.photoDialog>.primaryButton { width:100%; margin-top:15px; }
+.photoDialog>.textButton { display:flex; margin:0 auto; }
+@media(max-width:900px) { .workloadGrid { grid-template-columns:1fr 1fr; } }
+@media(max-width:600px) { .portal { padding:22px 15px 45px; } .workloadBoard { padding:17px; } .workloadGrid { gap:9px; } .workloadCard { padding:13px; } .workloadNumbers { gap:7px; } .workloadNumbers b { font-size:21px; } .workloadNumbers span { font-size:8px; } .workloadName { align-items:flex-start; flex-direction:column; } .workloadName strong { font-size:14px; } .workloadCard>p { font-size:9px; } .personalStats { grid-template-columns:1fr 1fr; gap:9px; } .personalStats>div { padding:17px; } .jobGrid { grid-template-columns:1fr; } .hero h1 { font-size:30px; } .sectionHeading h2 { font-size:18px; } .hero>p:last-child { font-size:12px; } .detailHeader { padding:19px; } .repairItem { padding:18px; } .repairItem>.primaryButton { width:100%; } .backdrop { padding:12px; } }
+@media(prefers-reduced-motion:reduce) { button.workloadCard { transition:none; } }

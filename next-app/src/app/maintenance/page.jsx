@@ -2,26 +2,37 @@
 import { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import MaintenanceForm from '../components/MaintenanceForm';
-import Loading from '../loading'; 
+import Loading from '../loading';
+import WorkloadBoard from '../../components/tech/WorkloadBoard';
+import JobAgeNotice from '../../components/tech/JobAgeNotice';
+import useSastDay from '../../hooks/useSastDay';
+import SlotAvailability from '../../components/maintenance/SlotAvailability';
+import { saveSchedule } from '../../lib/maintenance/saveSchedule';
+import { appointmentLabel } from '../../lib/maintenance/schedule.mjs';
+import { contractorName, bookingLoad, hasTaskPhotos, taskComplete, sastDay, finalizeMaintenanceJob } from '../../lib/tech/jobs.mjs';
 
 import { 
   FaPlus, FaTools, FaClock, FaSearch, 
   FaCheckCircle, FaBars,
   FaFileSignature, FaExclamationCircle, 
-  FaTrash, FaPrint, FaArrowRight, FaCheck, FaTimes, FaUserCircle, FaEdit
+  FaTrash, FaPrint, FaCheck, FaTimes, FaUserCircle, FaEdit
 } from "react-icons/fa";
 
 import { db, auth } from '../Config/firebaseConfig';
 import { 
   collection, onSnapshot, addDoc, updateDoc, 
-  deleteDoc, doc, serverTimestamp, query, orderBy, getDoc
+  deleteDoc, doc, serverTimestamp, query, getDoc, runTransaction
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const MaintenancePage = () => {
+  const today = useSastDay();
   const [isOpen, setIsOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('requests'); 
   const [searchQuery, setSearchQuery] = useState('');
+  const [calendarJobId, setCalendarJobId] = useState(null);
+  const [calendarFresh, setCalendarFresh] = useState(false);
+  const [maintenanceError, setMaintenanceError] = useState('');
   
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,9 +47,14 @@ const MaintenancePage = () => {
 
   // --- 1. READ DATA ---
   useEffect(() => {
-    const q = query(collection(db, "maintenance"), orderBy("createdAt", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const q = query(collection(db, "maintenance"));
+    const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+      setCalendarFresh(!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites);
+      setMaintenanceError('');
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })).sort((a, b) => {
+        const time = job => job.createdAt?.toMillis?.() || (job.createdAt?.seconds ? job.createdAt.seconds * 1000 : Date.parse(job.issueDate || '') || 0);
+        return time(b) - time(a);
+      });
       setTickets(prevTickets => {
         // Merge fresh Firestore data with existing local state to preserve liability values
         return data.map(newTicket => {
@@ -58,7 +74,7 @@ const MaintenancePage = () => {
         });
       });
       setLoading(false);
-    }, (error) => console.error("DB Error:", error));
+    }, (error) => { console.error("DB Error:", error); setCalendarFresh(false); setLoading(false); setMaintenanceError('Unable to load the live job-card schedule. Check your connection and refresh before booking.'); });
 
     // Fetch User Role
     const authUnsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -109,7 +125,7 @@ const MaintenancePage = () => {
       });
       setIsLogModalOpen(false); 
       setActiveTab('requests');
-    } catch (error) {
+    } catch {
       alert("Failed to log request.");
     }
   };
@@ -128,7 +144,7 @@ const MaintenancePage = () => {
         status: 'active',
         contractor: 'Unassigned',
         priority: 'Medium',
-        issueDate: new Date().toISOString().split('T')[0],
+        issueDate: sastDay(),
         tasks: jobTasks,
         displayId: `JC-${Math.floor(Math.random() * 9000) + 1000}`
       });
@@ -136,15 +152,42 @@ const MaintenancePage = () => {
     } catch (error) { console.error(error); }
   };
 
+  const openAvailability = (jobId = null) => { setCalendarJobId(jobId); setActiveTab('calendar'); setSearchQuery(''); };
   const updateTicketField = async (ticketId, field, value) => {
-    try { await updateDoc(doc(db, "maintenance", ticketId), { [field]: value }); } catch (error) {}
+    const ticket = tickets.find(entry => entry.id === ticketId);
+    if (!ticket || ticket[field] === value) return;
+    const scheduling = ['contractor', 'externalContractor', 'appointmentDate', 'appointmentTime', 'appointmentDuration'].includes(field);
+    if (!scheduling) {
+      try { await updateDoc(doc(db, 'maintenance', ticketId), { [field]: value }); }
+      catch { alert('Unable to save this change. Please retry.'); }
+      return;
+    }
+    if (!calendarFresh) { alert('Wait for the live schedule to reconnect before changing assignments.'); return; }
+    const patch = { [field]: value };
+    if (field === 'contractor') patch.externalContractor = '';
+    const candidate = { ...ticket, ...patch }, name = contractorName(candidate), context = bookingLoad(tickets, candidate, today);
+    if (name && context.capacityWarning && !window.confirm(name + ' has ' + context.openBefore + ' other open job cards and ' + context.bookedOnDateBefore + ' others on this date. Review capacity. Continue?')) return;
+    try {
+      await saveSchedule(ticketId, patch, tickets, { requireFuture: false, expected: ticket });
+    } catch (error) {
+      if (error.code === 'UNTIMED_REVIEW' && window.confirm(error.message + ' Save after reviewing those cards?')) {
+        try { await saveSchedule(ticketId, patch, tickets, { requireFuture: false, allowUntimed: true, expected: ticket }); }
+        catch (retryError) { alert(retryError.message); }
+      } else if (error.code !== 'UNTIMED_REVIEW') alert(error.message || 'Unable to save this booking.');
+    }
   };
 
   const toggleTask = async (ticket, taskId) => {
-    const updatedTasks = ticket.tasks.map(task => 
-      task.id === taskId ? { ...task, done: !task.done } : task
-    );
-    try { await updateDoc(doc(db, "maintenance", ticket.id), { tasks: updatedTasks }); } catch (error) {}
+    try {
+      await runTransaction(db, async transaction => {
+        const jobRef = doc(db, 'maintenance', ticket.id), snapshot = await transaction.get(jobRef);
+        if (!snapshot.exists() || snapshot.data().status !== 'active') throw new Error('This job is no longer active.');
+        const current = snapshot.data(), task = current.tasks?.find(entry => String(entry.id) === String(taskId));
+        if (!task) throw new Error('Repair item not found.');
+        if (!task.done && !hasTaskPhotos(task)) throw new Error('A repair needs 1–2 photos in Tech View before it can be marked done.');
+        transaction.update(jobRef, { tasks: current.tasks.map(entry => String(entry.id) === String(taskId) ? { ...entry, done: !entry.done } : entry), updatedAt: serverTimestamp() });
+      });
+    } catch (error) { alert(error.message || 'Unable to update this repair.'); }
   };
 
   const toggleLiability = (ticket, taskId) => {
@@ -175,10 +218,22 @@ const MaintenancePage = () => {
     });
   };
 
-  const finalizeJob = async (ticketId) => {
-    if(confirm("Mark this job card as complete and archive it?")) {
-      try { await updateDoc(doc(db, "maintenance", ticketId), { status: 'completed', completedAt: new Date().toLocaleString() }); } catch (error) {}
-    }
+  const finalizeJob = async (ticketId, waivePhotos = false) => {
+    const message = waivePhotos
+      ? 'PQA approval: confirm ALL repairs on this job were already completed and photos are unavailable. This will archive the card and record your approval without photo evidence. Continue?'
+      : 'Mark this job card as complete and archive it?';
+    if (!confirm(message)) return;
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) throw new Error('Sign in before finalizing a job.');
+      await runTransaction(db, async transaction => {
+        const jobRef = doc(db, 'maintenance', ticketId), snapshot = await transaction.get(jobRef);
+        if (!snapshot.exists()) throw new Error('Job card not found.');
+        const profile = waivePhotos ? await transaction.get(doc(db, 'stuff', uid)) : null;
+        const patch = finalizeMaintenanceJob(snapshot.data(), { uid, role: profile?.data()?.role, waivePhotos });
+        transaction.update(jobRef, { ...patch, updatedAt: serverTimestamp() });
+      });
+    } catch (error) { alert(error.message || 'Unable to finalize this job.'); }
   };
 
   const openEditModal = (ticket) => {
@@ -189,25 +244,30 @@ const MaintenancePage = () => {
   const saveJobCardEdits = async (data) => {
     if (!editingTicket) return;
 
-    const existingTasks = Array.isArray(editingTicket.tasks) ? editingTicket.tasks : [];
-    const updatedTasks = data.faults.map((fault, index) => {
-      const existingTask = existingTasks.find(task => String(task.id) === String(fault.id));
-      return {
-        id: existingTask?.id ?? fault.id ?? Date.now() + index,
-        desc: fault.description,
-        area: fault.area || 'General',
-        done: existingTask?.done ?? false,
-        liability: existingTask?.liability ?? null,
-        images: existingTask?.images ?? [],
-        completedAt: existingTask?.completedAt ?? null
-      };
-    });
-
     const summaryIssue = data.faults.map(fault => `${fault.area}: ${fault.description}`).join(' | ');
     const uniqueAreas = [...new Set(data.faults.map(fault => fault.area))];
 
     try {
-      await updateDoc(doc(db, "maintenance", editingTicket.id), {
+      await runTransaction(db, async transaction => {
+        const jobRef = doc(db, 'maintenance', editingTicket.id), snapshot = await transaction.get(jobRef);
+        if (!snapshot.exists() || snapshot.data().status !== 'active') throw new Error('This job is no longer active.');
+        const latest = snapshot.data();
+        const existingTasks = Array.isArray(latest.tasks) ? latest.tasks : [];
+        const updatedTasks = data.faults.map((fault, index) => {
+          const existingTask = existingTasks.find(task => String(task.id) === String(fault.id));
+          return {
+            ...existingTask,
+            id: existingTask?.id ?? fault.id ?? Date.now() + index,
+            desc: fault.description,
+            area: fault.area || 'General',
+            done: existingTask?.done ?? false,
+            liability: existingTask?.liability ?? null,
+            images: existingTask?.images ?? [],
+            completedAt: existingTask?.completedAt ?? null
+          };
+        });
+
+        transaction.update(jobRef, {
         issue: summaryIssue,
         areas: uniqueAreas,
         rawFaults: data.faults.map(fault => ({
@@ -215,7 +275,9 @@ const MaintenancePage = () => {
           area: fault.area || 'General',
           description: fault.description
         })),
-        tasks: updatedTasks
+        tasks: updatedTasks,
+        updatedAt: serverTimestamp()
+        });
       });
       setEditingTicket(null);
     } catch (error) {
@@ -226,7 +288,7 @@ const MaintenancePage = () => {
 
   const deleteTicket = async (id) => {
     if(confirm("Permanently delete this record?")) {
-      try { await deleteDoc(doc(db, "maintenance", id)); } catch (error) { alert("Failed to delete."); }
+      try { await deleteDoc(doc(db, "maintenance", id)); } catch { alert("Failed to delete."); }
     }
   };
 
@@ -304,16 +366,16 @@ const MaintenancePage = () => {
                   )}
                </div>
 
-               <div className="flex flex-col lg:flex-row gap-4 justify-between items-center bg-white p-2 rounded-3xl shadow-sm border border-slate-200">
+               <div className="flex flex-col xl:flex-row gap-4 justify-between items-center bg-white p-2 rounded-3xl shadow-sm border border-slate-200">
                   <div className="flex bg-slate-100 p-1 rounded-xl w-full lg:w-auto overflow-x-auto no-scrollbar">
-                      {['requests', 'active', 'completed'].map(tab => (
-                        <button key={tab} onClick={() => { setActiveTab(tab); setSearchQuery(''); }} 
+                      {['requests', 'active', 'calendar', 'completed'].map(tab => (
+                        <button key={tab} onClick={() => { setCalendarJobId(null); setActiveTab(tab); setSearchQuery(''); }}
                             className={`flex-1 lg:flex-none px-4 md:px-6 py-3 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === tab ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>
-                          {tab === 'requests' ? 'New Requests' : tab === 'active' ? 'Active Jobs' : 'History'}
+                          {tab === 'requests' ? 'New Requests' : tab === 'active' ? 'Active Jobs' : tab === 'calendar' ? 'Slot Availability' : 'History'}
                         </button>
                       ))}
                   </div>
-                  <div className="relative w-full lg:w-96 group">
+                  <div className={`relative w-full xl:w-72 group ${activeTab === 'calendar' ? 'hidden' : ''}`}>
                       <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
                       <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} 
                         placeholder={activeTab === 'requests' ? "Search by UNIT..." : "Search by JOB ID..."} 
@@ -321,6 +383,10 @@ const MaintenancePage = () => {
                   </div>
                </div>
             </header>
+
+            {maintenanceError && <p role="alert" className="bg-red-50 text-red-800 rounded-xl p-4 mb-5">{maintenanceError}</p>}
+            {activeTab !== 'calendar' && <WorkloadBoard jobs={tickets} today={today}/>}
+            {activeTab === 'calendar' && <SlotAvailability jobs={tickets} today={today} initialJobId={calendarJobId} fresh={calendarFresh} openJob={id => { const job = tickets.find(entry => entry.id === id); setActiveTab(job?.status === 'completed' ? 'completed' : 'active'); setSearchQuery(job?.displayId || job?.unit || ''); }}/>}
 
             {/* CONTENT */}
             <div className="space-y-6">
@@ -341,7 +407,7 @@ const MaintenancePage = () => {
                                        {ticket.areas && ticket.areas.map(a => <span key={a} className="text-[8px] font-black bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">{a}</span>)}
                                        <span className="text-[8px] font-bold text-slate-400 uppercase flex items-center gap-1"><FaClock size={8}/> {ticket.loggedAt}</span>
                                     </div>
-                                    <p className="mt-3 text-sm font-medium text-slate-600 italic">"{ticket.issue}"</p>
+                                    <p className="mt-3 text-sm font-medium text-slate-600 italic">&quot;{ticket.issue}&quot;</p>
                                 </div>
                               </div>
                               <button onClick={() => promoteToJobCard(ticket)} className="w-full md:w-auto bg-slate-900 text-white px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-colors shadow-lg">Approve & Assign</button>
@@ -378,8 +444,7 @@ const MaintenancePage = () => {
                             >
                                 <option value="Unassigned">Assign Tech</option>
                                 <option value="Rasta">Rasta</option>
-                                <option value="Johannes">Johannes</option>
-                                <option value="Other">Other</option>
+                                <option value="Big boy">Big boy</option>
                                 <option value="External">External</option>
                             </select>
                           </div>
@@ -393,21 +458,16 @@ const MaintenancePage = () => {
                                 className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 w-28 disabled:text-slate-300"
                             >
                                 <option value="">External</option>
-                                <option value="Terry">Terry</option>
-                                <option value="Kobus">Kobus</option>
                                 <option value="Chris">Chris</option>
-                                <option value="Derick">Derick</option>
+                                <option value="Derrick">Derrick</option>
                             </select>
                           </div>
 
                           <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
                             <FaClock className="text-slate-400 mr-2" size={12}/>
-                            <input
-                                type="date"
-                                value={job.appointmentDate || ''}
-                                onChange={(e) => updateTicketField(job.id, 'appointmentDate', e.target.value)}
-                                className="bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 w-28"
-                            />
+                            <button onClick={() => openAvailability(job.id)} className="text-[10px] font-black text-blue-700 hover:underline text-left">
+                              {job.appointmentDate ? job.appointmentDate + ' · ' + appointmentLabel(job) : 'Book date & time'}
+                            </button>
                           </div>
 
                           <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
@@ -441,6 +501,10 @@ const MaintenancePage = () => {
                       </div>
                     </div>
 
+                    <div className="px-6 md:px-8 pt-5">
+                      <JobAgeNotice job={job} contractor={contractorName(job) || 'team'} today={today}/>
+                      {job.scheduleContext && <p className="text-xs text-slate-500 mb-3">Office booking snapshot: {job.scheduleContext.openBefore} other open cards and {job.scheduleContext.bookedOnDateBefore} other bookings on {job.scheduleContext.date || 'an unconfirmed date'}.{job.scheduleContext.capacityWarning ? ' Capacity warning acknowledged at booking.' : ''} Recorded {job.scheduleContext.recordedAt}.</p>}
+                    </div>
                     <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
                         <div>
                           <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic mb-2 leading-none">{job.unit}</h2>
@@ -453,12 +517,13 @@ const MaintenancePage = () => {
                             {job.tasks && job.tasks.map(task => (
                                <div key={task.id} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all ${task.done ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-transparent hover:border-blue-500'}`}>
                                   <div className="flex items-center space-x-4 flex-1">
-                                    <button onClick={() => toggleTask(job, task.id)} className="flex items-center space-x-4">
+                                    <button title={!task.done && !hasTaskPhotos(task) ? "Complete this repair with photos in Tech View" : "Update repair status"} disabled={!task.done && !hasTaskPhotos(task)} onClick={() => toggleTask(job, task.id)} className="flex items-center space-x-4 disabled:cursor-not-allowed disabled:opacity-50">
                                       <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${task.done ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-400'}`}>{task.done && <FaCheckCircle size={14} />}</div>
                                     </button>
                                     <div className="flex-1">
                                        <p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">{task.area}</p>
                                        <p className={`text-xs font-bold uppercase ${task.done ? 'line-through text-slate-400' : 'text-slate-900'}`}>{task.desc}</p>
+                                       {!hasTaskPhotos(task) && <p className="text-[10px] text-amber-700 mt-2">Photo evidence required · complete this item in Tech View.</p>}
                                        {task.completedAt && (
                                          <p className="text-[9px] text-green-600 font-bold mt-1">{task.completedAt}</p>
                                        )}
@@ -518,7 +583,7 @@ const MaintenancePage = () => {
                               <div className="space-y-3 text-xs font-bold text-slate-600">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[8px] font-black uppercase text-slate-400">Appointment</span>
-                                  <span>{job.appointmentDate || ''}</span>
+                                  <span>{job.appointmentDate ? job.appointmentDate + ' · ' + appointmentLabel(job) : 'Not booked'}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-[8px] font-black uppercase text-slate-400">Tenant Phone</span>
@@ -527,7 +592,9 @@ const MaintenancePage = () => {
                               </div>
                            </div>
                            <div className="pt-6 border-t border-slate-200 mt-6">
-                              <button onClick={() => finalizeJob(job.id)} className="w-full bg-green-500 text-white py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-green-200 active:scale-95 transition-all">Finalize Job Card</button>
+                              <button disabled={!job.tasks?.length || !job.tasks.every(taskComplete)} title="All repairs require completion and 1–2 photos" onClick={() => finalizeJob(job.id)} className="w-full bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed text-white py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest shadow-lg shadow-green-200 active:scale-95 transition-all">Finalize Job Card</button>
+                              {!job.tasks?.every(taskComplete) && <p className="text-xs text-slate-500 mt-3">Every repair item must be done with 1–2 photos. PQA can approve previously completed work when photos are unavailable.</p>}
+                              {userRole === 'PQA' && job.tasks?.length > 0 && !job.tasks.every(taskComplete) && <button onClick={() => finalizeJob(job.id, true)} className="w-full mt-3 border border-amber-300 bg-amber-50 text-amber-900 py-3 rounded-2xl font-bold text-xs">PQA: Finalize without photos</button>}
                            </div>
                         </div>
                     </div>
@@ -741,7 +808,7 @@ const MaintenancePage = () => {
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] font-black uppercase text-slate-500">Appointment Date</p>
-                    <p className="text-2xl font-black uppercase">{printTicket.appointmentDate || ''}</p>
+                    <p className="text-2xl font-black uppercase">{printTicket.appointmentDate ? printTicket.appointmentDate + ' · ' + appointmentLabel(printTicket) : 'Not booked'}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black uppercase text-slate-500">Date</p>
