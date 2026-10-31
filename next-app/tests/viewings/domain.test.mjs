@@ -80,3 +80,9 @@ test('viewing hours include 08:00 and 16:00 and reject slots outside office hour
     assert.throws(() => transition({ ...booking(), status: 'Reschedule Requested', request: { date: '2026-11-02', time } }, { action: 'approve' }, 'agent', now), /08:00 and 16:00/);
   }
 });
+
+ test('analytics combines property aliases from remote viewing fixes', () => {
+  const rows = ['LC', 'Lunnon Crest', 'LUNNONCREST', 'LC', 'Lunnon Crest'].map(unit => ({ unit, status: 'Completed', outcome: 'Accepted' }));
+  assert.equal(analytics(rows).top.unit, 'LUNNON CREST');
+  assert.equal(analytics(rows).top.visits, 5);
+ });

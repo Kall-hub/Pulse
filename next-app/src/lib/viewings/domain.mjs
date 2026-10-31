@@ -1,3 +1,9 @@
+export function normalizeUnitName(raw = '') {
+  const value = String(raw || '').trim().replace(/\s+/g, ' ').toUpperCase();
+  const key = value.replace(/[^A-Z0-9]/g, '');
+  const aliases = { LC: 'LUNNON CREST', LUNNONCREST: 'LUNNON CREST', BLVD: 'HILLCREST BOULEVARD', BOULEVARD: 'HILLCREST BOULEVARD', HILLCRESTBOULEVARD: 'HILLCREST BOULEVARD', VIEW: 'HILLCREST VIEW', HILLCRESTVIEW: 'HILLCREST VIEW', VILLAMAG: 'VILLA MAGNOLIA', VILLAMAGNOLIA: 'VILLA MAGNOLIA', JAK: 'JAKARANDA', JAKARANDA: 'JAKARANDA', JAKRANDA: 'JAKARANDA', RUM: 'RUMOURS', RUMOURS: 'RUMOURS' };
+  return aliases[key] || value;
+}
 export const ACTIVE = ['Awaiting Confirmation', 'Link Sent', 'Confirmed', 'Reschedule Requested', 'Slot Unavailable', 'No WhatsApp'];
 export const TERMINAL = ['Completed', 'Tenant Cancelled', 'Agent Cancelled'];
 export function fail(message, status = 400) { const e = new Error(message); e.status = status; throw e; }
@@ -23,7 +29,7 @@ export function slot(date, time, now = Date.now()) {
   return { date, time };
 }
 export function createBooking(input, now = Date.now()) {
-  return { prospect: text(input.prospect, 'Tenant name'), phone: phoneNumber(input.phone), unit: text(input.unit, 'Property / unit').toUpperCase(), agent: text(input.agent, 'Agent name'), ...slot(input.date, input.time, now), status: 'Awaiting Confirmation', whatsappStatus: input.whatsappPreferred === false ? 'not-preferred' : 'preferred', outcome: null, note: '', request: null, revision: 0, createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString() };
+  return { prospect: text(input.prospect, 'Tenant name'), phone: phoneNumber(input.phone), unit: normalizeUnitName(text(input.unit, 'Property / unit')), agent: text(input.agent, 'Agent name'), ...slot(input.date, input.time, now), status: 'Awaiting Confirmation', whatsappStatus: input.whatsappPreferred === false ? 'not-preferred' : 'preferred', outcome: null, note: '', request: null, revision: 0, createdAt: new Date(now).toISOString(), updatedAt: new Date(now).toISOString() };
 }
 // Pure state machine; persistence uses a Firestore transaction and revision check.
 export function transition(v, input, actor, now = Date.now()) {
@@ -67,7 +73,7 @@ export function transition(v, input, actor, now = Date.now()) {
 export function analytics(viewings) {
   const groups = new Map();
   for (const v of viewings) {
-    const unit = (v.unit || 'Unknown').trim().toUpperCase();
+    const unit = normalizeUnitName(v.unit || 'Unknown');
     if (!groups.has(unit)) groups.set(unit, { unit, bookings: 0, visits: 0, cancelled: 0, days: {} });
     const g = groups.get(unit); g.bookings++;
     if ((v.status || '').includes('Cancelled')) g.cancelled++;
