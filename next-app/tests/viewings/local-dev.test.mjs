@@ -38,6 +38,9 @@ test('missing Firebase settings give an actionable configuration response', asyn
     const r = await fetch(`http://127.0.0.1:${port}/.netlify/functions/viewings`, { headers: { authorization: 'Bearer configuration-test' } });
     assert.equal(r.status, 503);
     assert.match((await r.json()).error, /Firebase server settings are missing/);
+    const publicTech = await fetch(`http://127.0.0.1:${port}/.netlify/functions/tech-jobs`);
+    assert.equal(publicTech.status, 503); // Configuration is missing, not a contractor login.
+    assert.match((await publicTech.json()).error, /Firebase server settings are missing/);
   } finally {
     names.forEach((name, i) => { if (original[i] === undefined) delete process.env[name]; else process.env[name] = original[i]; });
     server.closeAllConnections();

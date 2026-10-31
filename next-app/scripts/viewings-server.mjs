@@ -2,11 +2,13 @@ import http from 'node:http';
 import viewings from '../netlify/functions/viewings.mjs';
 import action from '../netlify/functions/viewing-action.mjs';
 import tenant from '../netlify/functions/tenant-viewing.mjs';
+import techJobs from '../netlify/functions/tech-jobs.mjs';
 
 const handlers = new Map([
   ['/.netlify/functions/viewings', viewings],
   ['/.netlify/functions/viewing-action', action],
   ['/.netlify/functions/tenant-viewing', tenant],
+  ['/.netlify/functions/tech-jobs', techJobs],
 ]);
 
 export async function startViewingsServer() {
@@ -23,7 +25,7 @@ export async function startViewingsServer() {
       let size = 0;
       for await (const chunk of incoming) {
         size += chunk.length;
-        if (size > 8192) throw Object.assign(new Error('Request is too large.'), { status: 413 });
+        if (size > (url.pathname === '/.netlify/functions/tech-jobs' ? 2500000 : 8192)) throw Object.assign(new Error('Request is too large.'), { status: 413 });
         chunks.push(chunk);
       }
       const headers = new Headers();
