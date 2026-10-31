@@ -12,8 +12,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "The Pulse",
-  description: "Welcome to my personal website where I share my projects and services.",
+  title: { default: "Pulse | Property Operations", template: "%s | Pulse" },
+  applicationName: "Pulse",
+  description: "Manage maintenance, job cards, contractor schedules, viewings and stock in one place with Pulse.",
+  icons: {
+    icon: [{ url: "/pulse-icon.svg", type: "image/svg+xml" }, { url: "/pulse-icon-192.png", type: "image/png", sizes: "192x192" }],
+    apple: [{ url: "/pulse-icon-180.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({ children }) {
