@@ -5,6 +5,7 @@ import useViewingsPage from '../../hooks/useViewingsPage';
 import ViewingsHeader from '../../components/viewings/ViewingsHeader';
 import ViewingAnalytics from '../../components/viewings/ViewingAnalytics';
 import ViewingCard from '../../components/viewings/ViewingCard';
+import ViewingAvailability from '../../components/viewings/ViewingAvailability';
 import BookingModal from '../../components/viewings/BookingModal';
 import OutcomeModal from '../../components/viewings/OutcomeModal';
 import ShareBookingDialog from '../../components/viewings/ShareBookingDialog';
@@ -39,7 +40,9 @@ export default function ViewingsPage() {
     markNoWhatsApp,
     filteredViewings,
     decideReschedule,
-    decisionId
+    decisionId,
+    availabilityReady,
+    bookOpenSlot
   } = useViewingsPage();
 
   return (
@@ -54,7 +57,8 @@ export default function ViewingsPage() {
             </div>
         )}
         {!loading && filter === 'analytics' && <ViewingAnalytics viewings={viewings} />}
-        {!loading && filter !== 'analytics' && (
+        {!loading && filter === 'slots' && <ViewingAvailability viewings={viewings} ready={availabilityReady} onBook={bookOpenSlot} onOpenBooking={booking => { setFilter(booking.status === 'Completed' ? 'history' : 'upcoming'); window.setTimeout(() => document.getElementById('viewing-' + booking.id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100); }}/>}
+        {!loading && filter !== 'analytics' && filter !== 'slots' && (
             <div className="max-w-7xl mx-auto space-y-4 md:space-y-6">
             {filteredViewings.length === 0 ? (
                 <div className="text-center py-20 opacity-50 flex flex-col items-center">

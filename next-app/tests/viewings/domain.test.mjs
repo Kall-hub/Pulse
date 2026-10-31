@@ -100,3 +100,19 @@ test('legacy preferred slots can be reviewed without losing the original appoint
  assert.equal(transition(current, { action: 'reject' }, 'agent', now).lastDecision.request.time, '14:30');
  assert.equal(normalizeViewing({ ...old, status: 'Slot Unavailable' }).request, null);
 });
+
+test('keeping the original slot persists the client response and survives repeat confirmation', () => {
+ const original = booking();
+ const rejected = { ...original, status: 'Slot Unavailable', lastDecision: { action: 'reject', request: { date: '2026-11-02', time: '14:30' } } };
+ const patch = transition(rejected, { action: 'confirm' }, 'tenant', now);
+ assert.equal(patch.status, 'Confirmed');
+ assert.equal(patch.request, null);
+ assert.deepEqual(patch.tenantResponse, { action: 'kept-original', date: original.date, time: original.time, at: new Date(now).toISOString() });
+ const saved = { ...rejected, ...patch };
+ assert.equal(saved.date, original.date);
+ assert.equal(saved.time, original.time);
+ assert.equal(transition(saved, { action: 'confirm' }, 'tenant', now).tenantResponse.action, 'kept-original');
+ assert.equal(transition(saved, { action: 'reschedule', date: '2026-11-03', time: '09:00' }, 'tenant', now).tenantResponse.action, 'reschedule-requested');
+ assert.equal(transition(saved, { action: 'cancel' }, 'tenant', now).tenantResponse.action, 'cancelled');
+ assert.throws(() => transition(rejected, { action: 'confirm' }, 'tenant', Date.parse('2026-12-01')), /already passed/);
+});

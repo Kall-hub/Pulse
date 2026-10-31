@@ -28,7 +28,7 @@ export function linkFor(id, v) {
 }
 export function publicBooking(v) {
   v = normalizeViewing(v);
-  return { unit: v.unit, agent: v.agent, date: v.date, time: v.time, status: v.status, request: v.request || null, revision: v.revision || 0, lastDecision: v.lastDecision || null, officePhone: process.env.OFFICE_PHONE || '' };
+  return { unit: v.unit, agent: v.agent, date: v.date, time: v.time, status: v.status, request: v.request || null, revision: v.revision || 0, lastDecision: v.lastDecision || null, tenantResponse: v.tenantResponse || null, officePhone: process.env.OFFICE_PHONE || '' };
 }
 export function response(data, status = 200) { return Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } }); }
 export function errorResponse(e) { if (!e.status) console.error('Viewings API:', e); return response({ error: e.status ? e.message : 'Unable to process this request. Please try again or contact your agent.' }, e.status || 500); }

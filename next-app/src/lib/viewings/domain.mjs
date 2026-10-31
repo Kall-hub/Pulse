@@ -38,17 +38,18 @@ export function transition(v, input, actor, now = Date.now()) {
   const patch = { revision: (v.revision || 0) + 1, updatedAt };
   const action = input.action;
   if (actor === 'tenant') {
-    if (action === 'cancel') return { ...patch, status: 'Tenant Cancelled', request: null };
+    if (action === 'cancel') return { ...patch, status: 'Tenant Cancelled', request: null, tenantResponse: { action: 'cancelled', at: updatedAt } };
     if (action === 'confirm') {
       if (!['Awaiting Confirmation', 'Link Sent', 'Confirmed', 'Slot Unavailable'].includes(v.status)) fail('Please choose another slot or wait for your agent.', 409);
+      if (new Date(`${v.date}T${v.time}:00+02:00`).valueOf() <= now) fail('The original appointment time has already passed. Please contact your agent to arrange another viewing.');
       slot(v.date, v.time, now);
-      return { ...patch, status: 'Confirmed' };
+      return { ...patch, status: 'Confirmed', request: null, tenantResponse: { action: v.status === 'Slot Unavailable' ? 'kept-original' : v.tenantResponse?.action === 'kept-original' ? 'kept-original' : 'confirmed', date: v.date, time: v.time, at: updatedAt } };
     }
     if (action === 'reschedule') {
       if (v.status === 'Reschedule Requested') fail('Your request is already awaiting review.', 409);
       const requested = slot(input.date, input.time, now);
       if (requested.date === v.date && requested.time === v.time) fail('Please choose a different slot.');
-      return { ...patch, status: 'Reschedule Requested', request: { ...requested, requestedAt: updatedAt }, lastDecision: null };
+      return { ...patch, status: 'Reschedule Requested', request: { ...requested, requestedAt: updatedAt }, lastDecision: null, tenantResponse: { action: 'reschedule-requested', at: updatedAt } };
     }
     fail('Unknown tenant action.');
   }

@@ -36,6 +36,7 @@ export default function useViewingsPage() {
   const [shareError, setShareError] = useState('');
 
   const [viewings, setViewings] = useState([]);
+  const [availabilityReady, setAvailabilityReady] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -44,18 +45,21 @@ export default function useViewingsPage() {
         try {
           const result = await viewingRequest('viewings');
           setViewings(result.viewings);
+          setAvailabilityReady(true);
           const userDoc = await getDoc(doc(db, "stuff", currentUser.uid));
           if (userDoc.exists()) {
             const data = userDoc.data();
             setUserRole(data.role);
           }
         } catch (error) {
+          setAvailabilityReady(false);
           setShareError(error.message);
         } finally {
           setLoading(false);
         }
       } else {
         setViewings([]);
+        setAvailabilityReady(false);
         setUserRole(null);
         setLoading(false);
       }
@@ -81,8 +85,8 @@ export default function useViewingsPage() {
       refreshing = true;
       try {
         const result = await viewingRequest('viewings');
-        if (active) setViewings(result.viewings);
-      } catch (error) { if (active) setShareError(error.message); }
+        if (active) { setViewings(result.viewings); setAvailabilityReady(true); }
+      } catch (error) { if (active) { setAvailabilityReady(false); setShareError(error.message); } }
       finally { refreshing = false; }
     };
     const interval = window.setInterval(refresh, 10000);
@@ -201,7 +205,17 @@ export default function useViewingsPage() {
     return false;
   });
 
+  const bookOpenSlot = slot => {
+    if (!availabilityReady) { setShareError('Refresh bookings before choosing an open slot.'); return; }
+    if (findBookingConflict(viewings, slot)) { setShareError('This slot is now booked. Choose another time.'); return; }
+    setBookingError('');
+    setFormData({ prospect: '', phone: '', unit: '', ...slot });
+    setIsBookModalOpen(true);
+  };
+
   return {
+    availabilityReady,
+    bookOpenSlot,
     isOpen,
     setIsOpen,
     filter,

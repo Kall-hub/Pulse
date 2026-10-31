@@ -13,7 +13,7 @@ const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp, o
   };
 
   return (
-    <div className={`bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden h-auto hover:shadow-md transition-all animate-in fade-in slide-in-from-bottom-4 ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
+    <div id={'viewing-' + data.id} className={`bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden h-auto hover:shadow-md transition-all animate-in fade-in slide-in-from-bottom-4 ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
 
       {/* MAIN CONTENT: Flex Col on Mobile, Row on Desktop */}
       <div className="px-6 py-6 md:px-8 flex flex-col md:flex-row justify-between items-start gap-6">
@@ -68,6 +68,8 @@ const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp, o
       </section>}
       {status === 'Slot Unavailable' && <p className="mx-6 mb-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Requested slot unavailable. Original appointment kept: {date} at {time}. Prepare the booking link to notify the client again.</p>}
 
+      {data.tenantResponse?.action === 'kept-original' && status === 'Confirmed' && <div className="mx-6 mb-5 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-900" role="status"><strong>Client kept the original slot</strong><p>{date} at {time} · SAST. Client response received and saved in Pulse.</p></div>}
+      {data.tenantResponse?.action === 'confirmed' && status === 'Confirmed' && <p className="mx-6 mb-5 rounded-xl bg-green-50 p-4 text-sm text-green-900">Client confirmed this appointment.</p>}
       {/* FEEDBACK SECTION */}
       {isCompleted && outcome && (
           <div className="px-6 md:px-8 pb-6">

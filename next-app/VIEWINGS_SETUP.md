@@ -39,3 +39,9 @@ The Sidebar's Firebase import casing was corrected from `Config` to `config` to 
 Original overwritten source files are backed up outside the app at `C:\Users\kally\Documents\New project\pulse-integration\originals`.
 
 References: [Netlify Functions API](https://docs.netlify.com/build/functions/api/), [Netlify Functions configuration](https://docs.netlify.com/build/functions/configuration/), [Firebase ID token verification](https://firebase.google.com/docs/auth/admin/verify-id-tokens).
+
+## Viewing slot availability and client confirmations
+
+The Slot Availability tab shows a monthly calendar and host-specific appointment starts from 08:00 to 16:00 in 15-minute steps. Select or enter the same host name used on booking cards; capitalization and extra spaces are ignored. Open times prefill a new booking form, while booked appointments open their card. Final saves still use the server transaction to prevent simultaneous double bookings. This schedule tracks exact starts, not viewing duration or travel time. Cancelled bookings release their slot; pending requests preserve the original appointment until approved. Availability selection is disabled after a booking-refresh error until fresh data loads.
+
+When a client keeps the original slot after a rejected request, Pulse stores a timestamped tenant response. The client sees a saved confirmation and staff see “Client kept the original slot” on the booking card after the next refresh. Network errors and timeouts prompt the client to refresh and check saved status before retrying.

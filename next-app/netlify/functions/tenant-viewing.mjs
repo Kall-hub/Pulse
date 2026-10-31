@@ -19,7 +19,7 @@ export async function POST(request) {
       if ((v.revision || 0) !== input.revision) fail('Your booking changed. Refresh to see the latest details.', 409);
       const patch = transition(v, input, 'tenant');
       tx.update(ref, patch);
-      tx.set(ref.collection('events').doc(), { action: input.action, actor: 'tenant-link', at: new Date().toISOString(), previousStatus: v.status, status: patch.status, request: patch.request || null });
+      tx.set(ref.collection('events').doc(), { action: input.action, actor: 'tenant-link', at: new Date().toISOString(), previousStatus: v.status, status: patch.status, request: patch.request || null, tenantResponse: patch.tenantResponse || null });
       return publicBooking({ ...v, ...patch });
     });
     return response({ viewing });
