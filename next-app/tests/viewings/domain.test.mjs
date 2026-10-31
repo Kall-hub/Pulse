@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createBooking, transition, analytics, dailySeries, phoneNumber, slot } from '../../src/lib/viewings/domain.mjs';
+import { createBooking, transition, analytics, dailySeries, phoneNumber, slot, normalizeViewing } from '../../src/lib/viewings/domain.mjs';
 const now = Date.parse('2026-10-29T08:00:00Z');
 const input = { prospect:'Jane Tenant',phone:'082 123 4567',unit:'a612',agent:'Sam Agent',date:'2026-11-01',time:'10:00' };
 const booking = () => createBooking(input,now);
@@ -21,11 +21,16 @@ test('reschedule keeps current appointment until approval, then moves it', () =>
   assert.equal(approved.date,'2026-11-02'); assert.equal(approved.time,'14:30'); assert.equal(approved.status,'Confirmed'); assert.equal(approved.request,null);
   assert.throws(() => transition(approved,{action:'approve'},'agent',now));
 });
-test('unavailable slot allows a fresh request and does not silently confirm the old slot', () => {
+test('unavailable slot preserves the original until the client explicitly keeps it or cancels', () => {
   const v=booking(), pending={...v,...transition(v,{action:'reschedule',date:'2026-11-02',time:'14:30'},'tenant',now)};
   const rejected={...pending,...transition(pending,{action:'reject'},'agent',now)};
   assert.equal(rejected.date,v.date); assert.equal(rejected.status,'Slot Unavailable');
-  assert.throws(() => transition(rejected,{action:'confirm'},'tenant',now));
+  const kept = { ...rejected, ...transition(rejected,{action:'confirm'},'tenant',now) };
+  assert.equal(kept.status, 'Confirmed');
+  assert.equal(kept.date, v.date);
+  assert.equal(kept.time, v.time);
+  assert.equal(transition(rejected,{action:'cancel'},'tenant',now).status, 'Tenant Cancelled');
+  assert.throws(() => transition(rejected,{action:'confirm'},'tenant',Date.parse('2026-12-01')));
   assert.equal(transition(rejected,{action:'reschedule',date:'2026-11-03',time:'09:00'},'tenant',now).status,'Reschedule Requested');
 });
 test('cancelled and completed records reject later tenant actions', () => {
@@ -86,3 +91,12 @@ test('viewing hours include 08:00 and 16:00 and reject slots outside office hour
   assert.equal(analytics(rows).top.unit, 'LUNNON CREST');
   assert.equal(analytics(rows).top.visits, 5);
  });
+
+test('legacy preferred slots can be reviewed without losing the original appointment', () => {
+ const old = { ...booking(), status: 'Reschedule Requested', rescheduleRequest: { date: '2026-11-02', time: '14:30' } };
+ const current = normalizeViewing(old);
+ assert.deepEqual(current.request, old.rescheduleRequest);
+ assert.equal(transition(current, { action: 'approve' }, 'agent', now).date, '2026-11-02');
+ assert.equal(transition(current, { action: 'reject' }, 'agent', now).lastDecision.request.time, '14:30');
+ assert.equal(normalizeViewing({ ...old, status: 'Slot Unavailable' }).request, null);
+});

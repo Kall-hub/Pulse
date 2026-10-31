@@ -1,8 +1,8 @@
 import { agent, database, response, errorResponse, body } from '../lib/server.mjs';
 import { reserveSlot } from '../lib/availability.mjs';
-import { createBooking } from '../lib/domain.mjs';
+import { createBooking, normalizeViewing } from '../lib/domain.mjs';
 export async function GET(request) {
-  try { await agent(request); const snap = await database().db.collection('viewings').get(); return response({ viewings: snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)) }); } catch (e) { return errorResponse(e); }
+  try { await agent(request); const snap = await database().db.collection('viewings').get(); return response({ viewings: snap.docs.map(d => ({ ...normalizeViewing(d.data()), id: d.id })).sort((a,b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)) }); } catch (e) { return errorResponse(e); }
 }
 export async function POST(request) {
   try {

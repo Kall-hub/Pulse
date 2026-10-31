@@ -1,7 +1,7 @@
 'use client';
 import { FaUserFriends, FaCalendarAlt, FaClock, FaTimes, FaCheck, FaUserTie, FaWhatsapp, FaBan } from 'react-icons/fa';
 
-const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp }) => {
+const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp, onApprove, onReject, decisionBusy }) => {
   const { unit, prospect, phone, agent, date, time, status, outcome, note, whatsappStatus } = data;
   const isCancelled = status.includes('Cancelled');
   const isCompleted = status === 'Completed';
@@ -56,6 +56,18 @@ const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp })
         </div>
       </div>
 
+      {status === 'Reschedule Requested' && <section className="mx-6 mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5" aria-label="Reschedule request">
+        <p className="text-xs font-black uppercase tracking-widest text-amber-800">Client requested a new time</p>
+        <p className="mt-2 text-lg font-bold text-slate-900">{data.request?.date || 'Date missing'} at {data.request?.time || 'Time missing'} · SAST</p>
+        <p className="mt-2 text-sm text-slate-600">Original appointment: {date} at {time}. It stays reserved until you approve a change or cancel.</p>
+        {!data.request && <p role="alert" className="mt-2 text-sm text-red-700">This older request has no usable slot details. Ask the client to submit a fresh request using a new booking link.</p>}
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button disabled={decisionBusy || !data.request} onClick={onApprove} className="rounded-xl bg-purple-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">Approve new time</button>
+          <button disabled={decisionBusy || !data.request} onClick={onReject} className="rounded-xl border border-amber-300 bg-white px-5 py-3 text-sm font-bold text-amber-900 disabled:opacity-50">Reject · slot unavailable</button>
+        </div><p className="mt-3 text-xs text-slate-600">Either decision prepares a new private link and WhatsApp reply for you to send.</p>
+      </section>}
+      {status === 'Slot Unavailable' && <p className="mx-6 mb-5 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Requested slot unavailable. Original appointment kept: {date} at {time}. Prepare the booking link to notify the client again.</p>}
+
       {/* FEEDBACK SECTION */}
       {isCompleted && outcome && (
           <div className="px-6 md:px-8 pb-6">
@@ -94,7 +106,7 @@ const ViewingCard = ({ data, onCancel, onComplete, onResend, onMarkNoWhatsApp })
                 <button onClick={onCancel} className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-white hover:bg-red-500 hover:border-red-500 transition-all">
                     Cancel
                 </button>
-                <button onClick={onComplete} className="flex-1 md:flex-none bg-slate-900 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center space-x-2 shadow-lg hover:bg-black transition-all">
+                <button disabled={status === 'Reschedule Requested' || status === 'Slot Unavailable'} onClick={onComplete} className="flex-1 md:flex-none bg-slate-900 text-white px-5 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center space-x-2 shadow-lg hover:bg-black transition-all">
                     <FaCheck className="text-green-400" /> <span>Result</span>
                 </button>
             </div>

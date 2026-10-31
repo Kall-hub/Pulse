@@ -1,6 +1,6 @@
 import { reserveSlot } from '../lib/availability.mjs';
 import { agent, database, response, errorResponse, body, linkFor } from '../lib/server.mjs';
-import { transition, fail, TERMINAL } from '../lib/domain.mjs';
+import { transition, fail, TERMINAL, normalizeViewing } from '../lib/domain.mjs';
 export async function POST(request, context) {
   try {
     const user = await agent(request), input = await body(request), { id } = await context.params;
@@ -8,7 +8,7 @@ export async function POST(request, context) {
     const { db } = database(), ref = db.collection('viewings').doc(id);
     const viewing = await db.runTransaction(async tx => {
       const snap = await tx.get(ref); if (!snap.exists) fail('Booking not found.', 404);
-      const v = snap.data();
+      const v = normalizeViewing(snap.data());
       if (input.revision !== (v.revision || 0)) fail('This booking changed. Refresh and try again.', 409);
       let patch;
       if (input.action === 'share') {

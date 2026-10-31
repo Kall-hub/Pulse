@@ -40,7 +40,7 @@ export function transition(v, input, actor, now = Date.now()) {
   if (actor === 'tenant') {
     if (action === 'cancel') return { ...patch, status: 'Tenant Cancelled', request: null };
     if (action === 'confirm') {
-      if (!['Awaiting Confirmation', 'Link Sent', 'Confirmed'].includes(v.status)) fail('Please choose another slot or wait for your agent.', 409);
+      if (!['Awaiting Confirmation', 'Link Sent', 'Confirmed', 'Slot Unavailable'].includes(v.status)) fail('Please choose another slot or wait for your agent.', 409);
       slot(v.date, v.time, now);
       return { ...patch, status: 'Confirmed' };
     }
@@ -107,4 +107,11 @@ export function assertBookingAvailable(viewings, candidate, excludeId) {
   if (findBookingConflict(viewings, candidate, excludeId)) {
     fail('Double booking: ' + candidate.agent.trim() + ' already has an appointment on ' + candidate.date + ' at ' + candidate.time + ' (SAST). Choose another time or cancel the existing appointment.', 409);
   }
+}
+
+// Older viewing pages stored preferred slots under rescheduleRequest.
+export function normalizeViewing(viewing) {
+  return viewing.status === 'Reschedule Requested' && !viewing.request && viewing.rescheduleRequest
+    ? { ...viewing, request: viewing.rescheduleRequest }
+    : viewing;
 }

@@ -3,7 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { signLink } from './tokens.mjs';
 export { verifyLink } from './tokens.mjs';
-import { fail } from './domain.mjs';
+import { fail, normalizeViewing } from './domain.mjs';
 export function database() {
   const missing = ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"].filter(name => !process.env[name]?.trim());
   if (missing.length) fail("Viewings backend is running but Firebase server settings are missing. Fill in .env.local using VIEWINGS_SETUP.md, then restart npm run dev. On Netlify, set the server environment variables.", 503);
@@ -27,6 +27,7 @@ export function linkFor(id, v) {
   return `${process.env.APP_ORIGIN}/viewing#${token}`;
 }
 export function publicBooking(v) {
+  v = normalizeViewing(v);
   return { unit: v.unit, agent: v.agent, date: v.date, time: v.time, status: v.status, request: v.request || null, revision: v.revision || 0, lastDecision: v.lastDecision || null, officePhone: process.env.OFFICE_PHONE || '' };
 }
 export function response(data, status = 200) { return Response.json(data, { status, headers: { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } }); }

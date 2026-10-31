@@ -19,7 +19,7 @@ export default function ViewingsHeader({ isOpen, setIsOpen, filter, setFilter, u
              {/* Scrollable Tabs */}
              <div className="w-full overflow-x-auto pb-1">
                 <div className="flex bg-slate-200 p-1 rounded-xl w-fit shadow-inner scale-95 origin-left whitespace-nowrap">
-                   {['upcoming', 'cancelled', 'history', 'analytics'].map(f => (
+                   {['upcoming', 'requests', 'cancelled', 'history', 'analytics'].map(f => (
                        <button key={f} onClick={() => setFilter(f)} className={`px-6 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${filter === f ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-500'}`}>
                            {f.toUpperCase()}
                        </button>

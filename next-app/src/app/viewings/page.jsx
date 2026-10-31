@@ -37,7 +37,9 @@ export default function ViewingsPage() {
     saveOutcome,
     resendLink,
     markNoWhatsApp,
-    filteredViewings
+    filteredViewings,
+    decideReschedule,
+    decisionId
   } = useViewingsPage();
 
   return (
@@ -61,10 +63,13 @@ export default function ViewingsPage() {
                 </div>
             ) : (
                 filteredViewings.map(v => (
-                    <ViewingCard 
-                        key={v.id} 
-                        data={v} 
-                        onCancel={() => cancelViewing(v.id)} 
+                    <ViewingCard
+                        key={v.id}
+                        data={v}
+                        decisionBusy={decisionId !== null}
+                        onApprove={() => decideReschedule(v.id, 'approve')}
+                        onReject={() => decideReschedule(v.id, 'reject')}
+                        onCancel={() => cancelViewing(v.id)}
                         onComplete={() => openCompleteModal(v.id)}
                         onResend={() => resendLink(v)}
                         onMarkNoWhatsApp={() => markNoWhatsApp(v.id)}

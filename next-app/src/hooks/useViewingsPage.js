@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../app/Config/firebaseConfig';
+import { bookingMessage } from '../lib/viewings/share.mjs';
 import { findBookingConflict, ACTIVE } from '../lib/viewings/domain.mjs';
 
 async function viewingRequest(path, input) {
@@ -110,7 +111,7 @@ export default function useViewingsPage() {
   };
 
   // Helper: Send WhatsApp message
-  const sendWhatsAppLink = async (phone, prospect, unit, date, time, bookingId) => {
+  const sendWhatsAppLink = async (phone, bookingId) => {
     setShareError('');
     try {
       const result = await viewingRequest('viewing-action?id=' + encodeURIComponent(bookingId), {
@@ -118,7 +119,7 @@ export default function useViewingsPage() {
       });
       const link = new URL(result.viewing.link);
       if (!['http:', 'https:'].includes(link.protocol)) throw new Error('The booking link has an invalid address.');
-      const message = ['Hi ' + prospect + '!', '', 'Your viewing for ' + unit + ' is scheduled for ' + date + ' at ' + time + ' (SAST).', '', 'Confirm, cancel or request another time using this link:', '', link.href, '', 'OC Rental.'].join('\n');
+      const message = bookingMessage(result.viewing, link.href);
       setViewings(prev => prev.map(v => v.id === bookingId ? { ...v, ...result.viewing } : v));
       setShareDraft({ link: link.href, message, whatsapp: 'https://wa.me/' + formatPhoneForWhatsApp(phone) + '?text=' + encodeURIComponent(message), local: ['localhost', '127.0.0.1', '[::1]'].includes(link.hostname) });
     } catch (error) { setShareError(error.message || 'Unable to prepare booking link.'); }
@@ -135,12 +136,15 @@ export default function useViewingsPage() {
     try {
       const { viewing } = await viewingRequest('viewings', formData);
       setViewings(prev => [viewing, ...prev]);
-      await sendWhatsAppLink(viewing.phone, viewing.prospect, viewing.unit, viewing.date, viewing.time, viewing.id);
+      await sendWhatsAppLink(viewing.phone, viewing.id);
       setIsBookModalOpen(false);
       setFormData({ prospect: '', phone: '', unit: '', date: '', time: '', agent: '' });
     } catch (error) { setBookingError(error.message); }
     finally { bookingInProgress.current = false; setIsSaving(false); }
   };
+
+  const [decisionId, setDecisionId] = useState(null);
+  const decisionInProgress = useRef(false);
 
   const updateViewing = async (id, action, extra = {}) => {
     const current = viewings.find(v => v.id === id);
@@ -148,6 +152,21 @@ export default function useViewingsPage() {
       action, revision: current?.revision || 0, ...extra
     });
     setViewings(prev => prev.map(v => v.id === id ? viewing : v));
+    return viewing;
+  };
+
+  const decideReschedule = async (id, decision) => {
+    if (decisionInProgress.current) return;
+    if (!confirm(decision === 'approve' ? 'Approve the requested appointment time?' : 'Reject the requested slot as unavailable? The original appointment will remain reserved.')) return;
+    decisionInProgress.current = true; setDecisionId(id); setShareError('');
+    try {
+      const viewing = await updateViewing(id, decision);
+      const link = new URL(viewing.link);
+      if (!['http:', 'https:'].includes(link.protocol)) throw new Error('The booking link has an invalid address.');
+      const message = bookingMessage(viewing, link.href);
+      setShareDraft({ link: link.href, message, whatsapp: 'https://wa.me/' + formatPhoneForWhatsApp(viewing.phone) + '?text=' + encodeURIComponent(message), local: ['localhost', '127.0.0.1', '[::1]'].includes(link.hostname) });
+    } catch (error) { setShareError(error.message || 'Unable to review this request.'); }
+    finally { decisionInProgress.current = false; setDecisionId(null); }
   };
 
   const cancelViewing = async (id) => {
@@ -166,7 +185,7 @@ export default function useViewingsPage() {
     } catch (error) { setShareError(error.message); }
   };
 
-  const resendLink = (viewing) => sendWhatsAppLink(viewing.phone, viewing.prospect, viewing.unit, viewing.date, viewing.time, viewing.id);
+  const resendLink = (viewing) => sendWhatsAppLink(viewing.phone, viewing.id);
 
   const markNoWhatsApp = async (id) => {
     if (!confirm('Mark this contact as having no WhatsApp?')) return;
@@ -175,6 +194,7 @@ export default function useViewingsPage() {
   };
 
   const filteredViewings = viewings.filter(v => {
+    if (filter === 'requests') return v.status === 'Reschedule Requested';
     if (filter === 'upcoming') return ACTIVE.includes(v.status);
     if (filter === 'cancelled') return (v.status || '').includes('Cancelled');
     if (filter === 'history') return v.status === 'Completed';
@@ -208,6 +228,8 @@ export default function useViewingsPage() {
     saveOutcome,
     resendLink,
     markNoWhatsApp,
-    filteredViewings
+    filteredViewings,
+    decideReschedule,
+    decisionId
   };
 }
