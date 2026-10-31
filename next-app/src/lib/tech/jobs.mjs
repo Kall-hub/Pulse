@@ -2,7 +2,8 @@ export const INTERNAL_CONTRACTORS = ['Rasta', 'Big boy'];
 export const EXTERNAL_CONTRACTORS = ['Chris', 'Derrick'];
 export const CONTRACTORS = [...INTERNAL_CONTRACTORS, ...EXTERNAL_CONTRACTORS];
 export function contractorName(job) {
-  const name = String(job.contractor === 'External' ? job.externalContractor || '' : job.contractor || '').trim();
+  const assigned = String(job.contractor || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  const name = (/^external$/i.test(assigned) ? String(job.externalContractor || '') : assigned).normalize('NFKC').trim().replace(/\s+/g, ' ');
   if (/^(derick|drerick|derrick)$/i.test(name)) return 'Derrick';
   return CONTRACTORS.find(person => person.toLowerCase() === name.toLowerCase()) || '';
 }

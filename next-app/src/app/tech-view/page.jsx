@@ -28,7 +28,7 @@ export default function TechPortalPage() {
   return <><TechAccessPanel/><main className={styles.portal}>
     {store.error && <div role="alert" className={styles.error}><p>{store.error}</p><button onClick={store.retry}>Try again</button></div>}
     {notice && <p role="status" className={styles.success}>{notice}</p>}
-    {!name ? <>
+    {!store.ready ? <section className={styles.empty}><h1>{store.loading ? 'Connecting to your job cards' : 'Job counts unavailable'}</h1><p role="status">{store.cached ? 'Waiting for the current maintenance records. Cached data is not shown as zero work.' : store.loading ? 'Restoring your session and loading current maintenance jobs...' : 'The job list has not loaded. The office job cards have not been changed.'}</p>{store.cached && <button className={styles.textButton} onClick={store.retry}>Reconnect</button>}{!store.loading && <a className={styles.textButton} href="/login">Sign in to Pulse</a>}</section> : !name ? <>
       <header className={styles.hero}><p className={styles.eyebrow}>PULSE TECH</p><h1>Your work. Clear and ready.</h1><p>Choose your name to see today’s assigned job cards. Each repair needs a photo before it can be marked done.</p></header>
       {store.loading ? <p role="status">Loading your team...</p> : <><WorkloadBoard jobs={store.team} today={today} onSelect={choose}/><section aria-label="External contractor access"><div className={styles.sectionHeading}><h2>External contractor job cards</h2></div><div className={styles.detailMeta}>{EXTERNAL_CONTRACTORS.map(person => <button key={person} className={styles.textButton} onClick={() => choose(person)}>Open {person}’s jobs →</button>)}</div></section></>}
     </> : selectedJob ? <>

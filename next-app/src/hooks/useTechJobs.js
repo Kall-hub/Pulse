@@ -1,30 +1,29 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '../app/Config/firebaseConfig';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from '../app/Config/firebaseConfig';
 import { contractorName } from '../lib/tech/jobs.mjs';
+import { subscribeTechJobs } from '../lib/tech/subscription.mjs';
 export default function useTechJobs(name, historyOpen) {
-  const [team, setTeam] = useState([]), [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true), [historyLoading, setHistoryLoading] = useState(false), [error, setError] = useState(''), [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    setLoading(true); setError('');
-    return onSnapshot(query(collection(db, 'maintenance'), where('status', '==', 'active')), snapshot => {
-      setTeam(snapshot.docs.map(entry => ({ ...entry.data(), id: entry.id }))); setLoading(false);
-    }, () => { setError('Unable to load active jobs. Check your connection or ask the office to check access.'); setLoading(false); });
-  }, [attempt]);
-  useEffect(() => {
-    setHistory([]);
-    if (!name || !historyOpen) return;
-    setHistoryLoading(true);
-    const aliases = name === 'Derrick' ? ['Derrick', 'Derick', 'Drerick'] : [name];
-    const requests = [query(collection(db, 'maintenance'), where('contractor', 'in', aliases), where('status', '==', 'completed'))];
-    if (name === 'Chris' || name === 'Derrick') requests.push(query(collection(db, 'maintenance'), where('contractor', '==', 'External'), where('externalContractor', 'in', aliases), where('status', '==', 'completed')));
-    const results = requests.map(() => null);
-    const unsubscribes = requests.map((request, index) => onSnapshot(request, snapshot => {
-      results[index] = snapshot.docs.map(entry => ({ ...entry.data(), id: entry.id }));
-      if (results.every(Boolean)) { setHistory([...new Map(results.flat().map(job => [job.id, job])).values()]); setHistoryLoading(false); }
-    }, () => { setError('Unable to load completed jobs. Please retry or ask the office to check access.'); setHistoryLoading(false); }));
-    return () => unsubscribes.forEach(unsubscribe => unsubscribe());
-  }, [name, historyOpen, attempt]);
-  return { team, jobs: team.filter(job => contractorName(job) === name), history, loading, historyLoading, error, retry: () => { setError(''); setAttempt(value => value + 1); } };
+ const [state, setState] = useState({ jobs: [], phase: 'loading', error: '' });
+ const [attempt, setAttempt] = useState(0);
+ useEffect(() => subscribeTechJobs({
+  watchAuth: listener => onAuthStateChanged(auth, listener),
+  // Match Maintenance's collection subscription, including older cards without createdAt.
+  watchJobs: (next, error) => onSnapshot(collection(db, 'maintenance'), { includeMetadataChanges: true }, next, error),
+  onState: setState,
+ }), [attempt]);
+ const team = state.jobs.filter(job => job.status === 'active');
+ return {
+  team,
+  jobs: team.filter(job => contractorName(job) === name),
+  history: historyOpen ? state.jobs.filter(job => job.status === 'completed' && contractorName(job) === name) : [],
+  loading: state.phase === 'loading' || state.phase === 'cached',
+  ready: state.phase === 'ready',
+  cached: state.phase === 'cached',
+  historyLoading: false,
+  error: state.error,
+  retry: () => { setState({ jobs: [], phase: 'loading', error: '' }); setAttempt(value => value + 1); },
+ };
 }

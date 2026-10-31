@@ -135,3 +135,10 @@ test('normal finalization still requires completed items with evidence', () => {
   assert.equal(patch.status, 'completed');
   assert.equal(patch.photoWaiver, undefined);
 });
+
+test('contractor matching handles legacy spacing, casing and external labels', () => {
+ assert.equal(contractorName({contractor:'  BIG   BOY  '}),'Big boy');
+ assert.equal(contractorName({contractor:' RASTA '}),'Rasta');
+ assert.equal(contractorName({contractor:' external ',externalContractor:' DRERICK '}),'Derrick');
+ assert.equal(contractorName({contractor:' external ',externalContractor:' chris '}),'Chris');
+});
