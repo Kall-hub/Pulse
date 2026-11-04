@@ -25,3 +25,7 @@ All assignment/time updates in Maintenance use a Firestore transaction. A per-co
 This remains protected by the existing Firebase login and deployed maintenance access rules. Application validation does not replace a future server-side/Firestore authorization review for independent SaaS organizations.
 
 Run npm run test:maintenance for interval boundaries, time zones, working hours, legacy uncertainty, concurrent reservations, release and stale-update guards. Before rollout, test booking/rescheduling with two real signed-in sessions against the deployed Firebase project, then verify that the contractor sees the new date/time in Tech View.
+
+## Temporarily disabled in the office UI
+
+MAINTENANCE_PLANNING_ENABLED in src/lib/maintenance/features.mjs is false. Maintenance shows only New Requests, Active Jobs and History. Calendar entry points, workload/capacity warnings, aging notices and booking snapshots are hidden. Staff can assign or reassign contractors directly without schedule or capacity confirmations. Existing dates, schedule records and the calendar implementation remain intact for a later deliberate re-enable. Photo completion and PQA rights are unchanged. This switch affects the Maintenance office page, not the Viewings calendar or contractor Tech View.

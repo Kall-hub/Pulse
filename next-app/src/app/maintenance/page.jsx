@@ -7,6 +7,7 @@ import WorkloadBoard from '../../components/tech/WorkloadBoard';
 import JobAgeNotice from '../../components/tech/JobAgeNotice';
 import useSastDay from '../../hooks/useSastDay';
 import SlotAvailability from '../../components/maintenance/SlotAvailability';
+import { MAINTENANCE_PLANNING_ENABLED } from '../../lib/maintenance/features.mjs';
 import { saveSchedule } from '../../lib/maintenance/saveSchedule';
 import { appointmentLabel } from '../../lib/maintenance/schedule.mjs';
 import { contractorName, bookingLoad, hasTaskPhotos, taskComplete, sastDay, finalizeMaintenanceJob } from '../../lib/tech/jobs.mjs';
@@ -74,7 +75,7 @@ const MaintenancePage = () => {
         });
       });
       setLoading(false);
-    }, (error) => { console.error("DB Error:", error); setCalendarFresh(false); setLoading(false); setMaintenanceError('Unable to load the live job-card schedule. Check your connection and refresh before booking.'); });
+    }, (error) => { console.error("DB Error:", error); setCalendarFresh(false); setLoading(false); setMaintenanceError('Unable to load job cards. Check your connection and refresh.'); });
 
     // Fetch User Role
     const authUnsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -152,10 +153,23 @@ const MaintenancePage = () => {
     } catch (error) { console.error(error); }
   };
 
-  const openAvailability = (jobId = null) => { setCalendarJobId(jobId); setActiveTab('calendar'); setSearchQuery(''); };
+  const openAvailability = (jobId = null) => { if (!MAINTENANCE_PLANNING_ENABLED) return; setCalendarJobId(jobId); setActiveTab('calendar'); setSearchQuery(''); };
   const updateTicketField = async (ticketId, field, value) => {
     const ticket = tickets.find(entry => entry.id === ticketId);
     if (!ticket || ticket[field] === value) return;
+    if (!MAINTENANCE_PLANNING_ENABLED) {
+      try {
+        await runTransaction(db, async transaction => {
+          const jobRef = doc(db, 'maintenance', ticketId), snapshot = await transaction.get(jobRef);
+          if (!snapshot.exists() || snapshot.data().status !== 'active') throw new Error('This job is no longer active.');
+          const patch = { [field]: value, updatedAt: serverTimestamp() };
+          if (field === 'contractor') patch.externalContractor = '';
+          transaction.update(jobRef, patch);
+        });
+      } catch (error) { alert(error.message || 'Unable to save this change. Please retry.'); }
+      return;
+    }
+
     const scheduling = ['contractor', 'externalContractor', 'appointmentDate', 'appointmentTime', 'appointmentDuration'].includes(field);
     if (!scheduling) {
       try { await updateDoc(doc(db, 'maintenance', ticketId), { [field]: value }); }
@@ -368,7 +382,7 @@ const MaintenancePage = () => {
 
                <div className="flex flex-col xl:flex-row gap-4 justify-between items-center bg-white p-2 rounded-3xl shadow-sm border border-slate-200">
                   <div className="flex bg-slate-100 p-1 rounded-xl w-full lg:w-auto overflow-x-auto no-scrollbar">
-                      {['requests', 'active', 'calendar', 'completed'].map(tab => (
+                      {['requests', 'active', ...(MAINTENANCE_PLANNING_ENABLED ? ['calendar'] : []), 'completed'].map(tab => (
                         <button key={tab} onClick={() => { setCalendarJobId(null); setActiveTab(tab); setSearchQuery(''); }}
                             className={`flex-1 lg:flex-none px-4 md:px-6 py-3 rounded-lg text-[10px] font-black uppercase transition-all whitespace-nowrap ${activeTab === tab ? 'bg-white text-blue-600 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>
                           {tab === 'requests' ? 'New Requests' : tab === 'active' ? 'Active Jobs' : tab === 'calendar' ? 'Slot Availability' : 'History'}
@@ -385,8 +399,8 @@ const MaintenancePage = () => {
             </header>
 
             {maintenanceError && <p role="alert" className="bg-red-50 text-red-800 rounded-xl p-4 mb-5">{maintenanceError}</p>}
-            {activeTab !== 'calendar' && <WorkloadBoard jobs={tickets} today={today}/>}
-            {activeTab === 'calendar' && <SlotAvailability jobs={tickets} today={today} initialJobId={calendarJobId} fresh={calendarFresh} openJob={id => { const job = tickets.find(entry => entry.id === id); setActiveTab(job?.status === 'completed' ? 'completed' : 'active'); setSearchQuery(job?.displayId || job?.unit || ''); }}/>}
+            {MAINTENANCE_PLANNING_ENABLED && activeTab !== 'calendar' && <WorkloadBoard jobs={tickets} today={today}/>}
+            {MAINTENANCE_PLANNING_ENABLED && activeTab === 'calendar' && <SlotAvailability jobs={tickets} today={today} initialJobId={calendarJobId} fresh={calendarFresh} openJob={id => { const job = tickets.find(entry => entry.id === id); setActiveTab(job?.status === 'completed' ? 'completed' : 'active'); setSearchQuery(job?.displayId || job?.unit || ''); }}/>}
 
             {/* CONTENT */}
             <div className="space-y-6">
@@ -463,12 +477,12 @@ const MaintenancePage = () => {
                             </select>
                           </div>
 
-                          <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
+                          {MAINTENANCE_PLANNING_ENABLED && <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
                             <FaClock className="text-slate-400 mr-2" size={12}/>
                             <button onClick={() => openAvailability(job.id)} className="text-[10px] font-black text-blue-700 hover:underline text-left">
                               {job.appointmentDate ? job.appointmentDate + ' · ' + appointmentLabel(job) : 'Book date & time'}
                             </button>
-                          </div>
+                          </div>}
 
                           <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
                             <FaUserCircle className="text-slate-400 mr-2" size={12}/>
@@ -501,10 +515,10 @@ const MaintenancePage = () => {
                       </div>
                     </div>
 
-                    <div className="px-6 md:px-8 pt-5">
+                    {MAINTENANCE_PLANNING_ENABLED && <div className="px-6 md:px-8 pt-5">
                       <JobAgeNotice job={job} contractor={contractorName(job) || 'team'} today={today}/>
                       {job.scheduleContext && <p className="text-xs text-slate-500 mb-3">Office booking snapshot: {job.scheduleContext.openBefore} other open cards and {job.scheduleContext.bookedOnDateBefore} other bookings on {job.scheduleContext.date || 'an unconfirmed date'}.{job.scheduleContext.capacityWarning ? ' Capacity warning acknowledged at booking.' : ''} Recorded {job.scheduleContext.recordedAt}.</p>}
-                    </div>
+                    </div>}
                     <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
                         <div>
                           <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase italic mb-2 leading-none">{job.unit}</h2>
