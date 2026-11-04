@@ -658,7 +658,7 @@ const MaintenancePage = () => {
           </main>
 
           {/* MODALS */}
-          <MaintenanceForm isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onSubmit={addRequest} />
+          <MaintenanceForm isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onSubmit={addRequest} hideVehicle={true} />
           <MaintenanceForm
             isOpen={!!editingTicket}
             onClose={() => setEditingTicket(null)}
