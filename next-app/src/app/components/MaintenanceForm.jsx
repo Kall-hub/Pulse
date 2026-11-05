@@ -19,6 +19,7 @@ const MaintenanceForm = ({
 }) => {
   const [unit, setUnit] = useState('');
   const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [appointmentDate, setAppointmentDate] = useState('');
   
   // Staging Area (What is currently being typed)
   const [currentArea, setCurrentArea] = useState('General');
@@ -32,6 +33,7 @@ const MaintenanceForm = ({
 
     setUnit(initialData?.unit || '');
     setSelectedVehicle(initialData?.vehicle || null);
+    setAppointmentDate(initialData?.appointmentDate || '');
     setFaultList(initialData?.faults || []);
     setCurrentArea(initialData?.faults?.[0]?.area || 'General');
     setCurrentNote('');
@@ -79,14 +81,16 @@ const MaintenanceForm = ({
         return;
     }
 
-    // Send the whole package INCLUDING vehicle assignment
-    onSubmit({ unit, faults: cleanedFaults, vehicle: selectedVehicle });
+    // Include the appointment date on the request data so it is saved with the fault details.
+    const faultsWithAppointmentDate = cleanedFaults.map(fault => ({ ...fault, appointmentDate }));
+    onSubmit({ unit, faults: faultsWithAppointmentDate, vehicle: selectedVehicle, appointmentDate });
     
     // Reset Everything
     setUnit('');
     setFaultList([]);
     setCurrentNote('');
     setSelectedVehicle(null);
+    setAppointmentDate('');
   };
 
   if (!isOpen) return null;
@@ -121,6 +125,20 @@ const MaintenanceForm = ({
                 />
              </div>
 
+             {/* APPOINTMENT DATE */}
+             <div className="space-y-2">
+                <label htmlFor="maintenance-appointment-date" className="block text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">
+                  Appointment Date (Optional)
+                </label>
+                <input
+                  id="maintenance-appointment-date"
+                  type="date"
+                  value={appointmentDate}
+                  onChange={(e) => setAppointmentDate(e.target.value)}
+                  className="w-full bg-slate-800 text-white p-4 rounded-xl text-xs font-bold outline-none border border-slate-700 focus:border-blue-500"
+                />
+             </div>
+
              {/* 2. FAULT BUILDER */}
              <div className="bg-slate-900/50 p-4 rounded-3xl border border-slate-700/50 space-y-4">
                 
@@ -133,7 +151,7 @@ const MaintenanceForm = ({
                             key={area}
                             type="button"
                             onClick={() => setCurrentArea(area)}
-                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border transition-all ${currentArea === area ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
+                            className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase border transition-all ${currentArea === area ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'}`}
                         >
                             {area}
                         </button>
@@ -176,7 +194,7 @@ const MaintenanceForm = ({
                                         <option key={area} value={area}>{area}</option>
                                       ))}
                                     </select>
-                                    <button onClick={() => removeFault(item.id)} className="text-slate-500 hover:text-red-400">
+                                    <button type="button" onClick={() => removeFault(item.id)} className="text-slate-500 hover:text-red-400">
                                         <FaTrash size={10} />
                                     </button>
                                 </div>
@@ -202,6 +220,7 @@ const MaintenanceForm = ({
 
              {/* 4. SUBMIT BUTTON */}
              <button 
+                type="button"
                 onClick={handleSubmit}
                 disabled={faultList.length === 0 || !unit}
                 className="w-full bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 text-white py-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg shadow-blue-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
