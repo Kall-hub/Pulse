@@ -116,6 +116,7 @@ const MaintenancePage = () => {
     try {
       await addDoc(collection(db, "maintenance"), {
         unit: data.unit.toUpperCase(),
+        appointmentDate: data.appointmentDate || '',
         status: 'request',
         issue: summaryIssue,
         rawFaults: data.faults,
@@ -290,6 +291,7 @@ const MaintenancePage = () => {
           description: fault.description
         })),
         tasks: updatedTasks,
+        appointmentDate: data.appointmentDate || '',
         updatedAt: serverTimestamp()
         });
       });
@@ -665,6 +667,7 @@ const MaintenancePage = () => {
             onSubmit={saveJobCardEdits}
             initialData={editingTicket ? {
               unit: editingTicket.unit || '',
+              appointmentDate: editingTicket.appointmentDate || '',
               faults: Array.isArray(editingTicket.tasks) && editingTicket.tasks.length > 0
                 ? editingTicket.tasks.map((task, index) => ({
                     id: task.id ?? `task-${index}`,
