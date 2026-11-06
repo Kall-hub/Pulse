@@ -482,7 +482,7 @@ const MaintenancePage = () => {
                           {MAINTENANCE_PLANNING_ENABLED && <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2">
                             <FaClock className="text-slate-400 mr-2" size={12}/>
                             <button onClick={() => openAvailability(job.id)} className="text-[10px] font-black text-blue-700 hover:underline text-left">
-                              {job.appointmentDate ? job.appointmentDate + ' · ' + appointmentLabel(job) : 'Book date & time'}
+                              {job.appointmentDate ? job.appointmentDate + (job.appointmentTime ? ' · ' + appointmentLabel(job) : '') : 'Book date & time'}
                             </button>
                           </div>}
 
@@ -599,7 +599,7 @@ const MaintenancePage = () => {
                               <div className="space-y-3 text-xs font-bold text-slate-600">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[8px] font-black uppercase text-slate-400">Appointment</span>
-                                  <span>{job.appointmentDate ? job.appointmentDate + ' · ' + appointmentLabel(job) : 'Not booked'}</span>
+                                  <span>{job.appointmentDate ? job.appointmentDate + (job.appointmentTime ? ' · ' + appointmentLabel(job) : '') : 'Not booked'}</span>
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-[8px] font-black uppercase text-slate-400">Tenant Phone</span>
@@ -825,7 +825,7 @@ const MaintenancePage = () => {
                   </div>
                   <div className="text-center">
                     <p className="text-[10px] font-black uppercase text-slate-500">Appointment Date</p>
-                    <p className="text-2xl font-black uppercase">{printTicket.appointmentDate ? printTicket.appointmentDate + ' · ' + appointmentLabel(printTicket) : 'Not booked'}</p>
+                    <p className="text-2xl font-black uppercase">{printTicket.appointmentDate ? printTicket.appointmentDate + (printTicket.appointmentTime ? ' · ' + appointmentLabel(printTicket) : '') : 'Not booked'}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] font-black uppercase text-slate-500">Date</p>
